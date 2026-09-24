@@ -1178,6 +1178,51 @@ def('f_conduit', 48, 14, (p) => {
   for (const xx of [6, 14, 34, 42]) { p.set(xx, 4, GR_E); p.set(xx, 9, GR_E); }
 });
 
+// ---------- terrain patches (3/4 textured hazards; scale to patch radius) ----------
+
+/** ice pane: glazed floor with sheen streaks and stress cracks */
+def('terrain_ice', 48, 48, (p) => {
+  const body: RGB = [206, 236, 252], bodyD: RGB = [150, 196, 226], deep: RGB = [116, 168, 206], sheen: RGB = [245, 252, 255];
+  // rounded blob pane
+  for (let y = 0; y < 48; y++) for (let x = 0; x < 48; x++) {
+    const dx = x - 24, dy = y - 24;
+    const d = Math.sqrt(dx * dx + dy * dy) + Math.sin(Math.atan2(dy, dx) * 5) * 2.5;
+    if (d > 22) continue;
+    p.set(x, y, d > 20 ? deep : dx - dy < -6 ? bodyL2() : body);
+  }
+  function bodyL2() { return bodyD; }
+  // sheen streaks
+  for (const [x0, y0, len] of [[10, 12, 7], [20, 8, 5], [28, 20, 8], [14, 26, 6]] as const) {
+    for (let i = 0; i < len; i++) p.set(x0 + i, y0 + i - 1, sheen);
+  }
+  // stress cracks
+  const c: RGB = [96, 148, 186];
+  for (let i = 0; i < 6; i++) p.set(30 + i, 12 + i, c);
+  for (let i = 0; i < 4; i++) p.set(12 + i, 30 - i, c);
+  p.set(33, 19, c); p.set(34, 20, c);
+  // edge glints
+  p.set(8, 16, sheen); p.set(38, 30, sheen);
+});
+
+/** goo pool: murky slime with dripping edge and bright bubble spots */
+def('terrain_goo', 48, 48, (p) => {
+  const body: RGB = [110, 96, 52], bodyD: RGB = [70, 60, 30], deep: RGB = [48, 42, 22], hi: RGB = [168, 150, 84];
+  for (let y = 0; y < 48; y++) for (let x = 0; x < 48; x++) {
+    const dx = x - 24, dy = y - 24;
+    const d = Math.sqrt(dx * dx + dy * dy) + Math.sin(Math.atan2(dy, dx) * 4 + 1) * 3.5;
+    if (d > 22) continue;
+    p.set(x, y, d > 20 ? deep : (x * 7 + y * 3) % 23 === 0 ? bodyD : body);
+  }
+  // bright bubble spots (the per-frame bubbles rise from these)
+  for (const [bx, by] of [[16, 20], [30, 14], [24, 30], [36, 26]] as const) {
+    p.set(bx, by, hi); p.set(bx + 1, by, hi);
+  }
+  // surface sheen
+  for (const [x, y] of [[12, 12], [13, 11], [14, 11], [20, 9]] as const) p.set(x, y, hi);
+  // dripping tendril
+  p.set(38, 34, body); p.set(39, 36, bodyD); p.set(38, 38, bodyD); p.set(39, 40, deep);
+});
+
 // ---------- wall variants (16x34, same footprint as wall) ----------
 
 /** damaged wall segment: hole, rebar, scorch */

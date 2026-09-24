@@ -13,7 +13,7 @@ import { WEAPONS } from '../game/data/weapons';
 import { BallRig } from './ballRig';
 import { METEOR_FALL_T, METEOR_RADIUS } from '../game/runEvents';
 import { SKINS } from '../game/data/unlocks';
-import { ZONES } from '../game/data/zones';
+import { ZONES, SPAWN_X, SPAWN_Y } from '../game/data/zones';
 import { BIOMES, type Biome } from '../game/data/biomes';
 import { ELITE_MODS } from '../game/data/eliteMods';
 import type { AttackKind } from '../game/events';
@@ -53,6 +53,8 @@ function skyTexture(b: Biome): Texture {
   return tex;
 }
 
+const GLOWING_PROPS = new Set(['sp_reactor', 'sp_generator', 'sp_hub']);
+
 let glowTex: Texture | null = null;
 function glowTexture(): Texture {
   if (glowTex) return glowTex;
@@ -69,6 +71,73 @@ function glowTexture(): Texture {
   g.fillRect(0, 0, s, s);
   glowTex = Texture.from(c);
   return glowTex;
+}
+
+// terrain patch textures generated at NATIVE patch size (stretching a small atlas
+// sprite to a 500px blob turns 2px art into mush). Cached per kind+radius.
+const patchTexCache = new Map<string, Texture>();
+function patchTexture(kind: 'ice' | 'goo', r: number): Texture {
+  const key = kind + ':' + r;
+  const hit = patchTexCache.get(key);
+  if (hit) return hit;
+  const P = 2; // pixel grid — chunky but crisp
+  const w = r * 2 + 8;
+  const h = Math.round(r * 2 * GROUND_TILT) + 8;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d')!;
+  const cx = w / 2;
+  const cy = h / 2;
+  const ice = kind === 'ice';
+  const body = ice ? '#a9d4ec' : '#77683c';
+  const mid = ice ? '#8fbcdc' : '#5c5030';
+  const deep = ice ? '#6f9fc4' : '#443a20';
+  const accent = ice ? '#eef8ff' : '#a89654';
+  const crack = ice ? '#5f93ba' : '#332b18';
+  for (let y = 0; y < h; y += P) {
+    for (let x = 0; x < w; x += P) {
+      const dx = x + P / 2 - cx;
+      const dy = (y + P / 2 - cy) / GROUND_TILT;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const ang = Math.atan2(dy, dx);
+      const wob = r * (1 + Math.sin(ang * (ice ? 5 : 4) + (ice ? 0 : 1.1)) * 0.055 + Math.sin(ang * 9 + 2) * 0.02);
+      if (d > wob) continue;
+      let col = body;
+      if (d > wob - r * 0.1) col = deep;
+      else if ((x * 7 + y * 13) % 29 < 9) col = mid;
+      g.fillStyle = col;
+      g.fillRect(x, y, P, P);
+    }
+  }
+  // ice: diagonal sheen streaks + stress cracks; goo: bright bubble clusters
+  const streaks = ice ? 6 : 3;
+  for (let i = 0; i < streaks; i++) {
+    const sx = 24 + ((i * 97) % (w - 60));
+    const sy = 18 + ((i * 53) % (h - 50));
+    const len = 10 + ((i * 31) % 16);
+    for (let k = 0; k < len; k++) {
+      g.fillStyle = accent;
+      g.fillRect(sx + k * P, sy + k * P - P, P, P);
+      if (!ice && k % 3 === 0) { g.fillStyle = body; g.fillRect(sx + k * P + P, sy + k * P, P, P); }
+    }
+  }
+  if (ice) {
+    for (let i = 0; i < 4; i++) {
+      let px = 30 + ((i * 71) % (w - 70));
+      let py = 26 + ((i * 37) % (h - 60));
+      for (let k = 0; k < 8; k++) {
+        g.fillStyle = crack;
+        g.fillRect(px, py, P, P);
+        px += P * (i % 2 === 0 ? 1 : 0);
+        py += P * (i % 2 === 0 ? 0 : 1);
+        if (k % 3 === 2) px += i % 2 === 0 ? -P : P;
+      }
+    }
+  }
+  const tex = Texture.from(c);
+  patchTexCache.set(key, tex);
+  return tex;
 }
 
 let fogTexCache: Texture | null = null;
@@ -158,6 +227,8 @@ export class WorldRenderer implements FxSink {
   private ventSpots: Array<{ x: number; y: number }> = [];
   private setPieceNames: string[] = [];
   private ventAcc = 0;
+  private gooSpots: Array<{ x: number; y: number; r: number }> = [];
+  private glintAcc = 0;
 
   private particles!: ParticleSys;
   private shards!: ParticleSys;
@@ -500,13 +571,7 @@ export class WorldRenderer implements FxSink {
     // movement-terrain decals
     const pg = this.layers.patches;
     pg.clear();
-    for (const p of w.patches) {
-      if (p.kind === 'slick') continue; // drawn as striped floor sprites at the hazard pads
-      const tint = p.kind === 'ice' ? 0xbfe8ff : 0x8a6a3a;
-      const alpha = p.kind === 'ice' ? 0.3 : 0.34;
-      pg.circle(p.x, p.y * GROUND_TILT, p.r).fill({ color: tint, alpha });
-      pg.circle(p.x, p.y * GROUND_TILT, p.r).stroke({ width: 2, color: tint, alpha: alpha + 0.2 });
-    }
+    // ice/goo draw as textured blob sprites after the env pass; slick is striped floor paint
     // boost pads: static base plate (chevrons scroll per-frame in ganim)
     for (const p of w.boostPads) {
       pg.rect(p.x, p.y * GROUND_TILT, p.w, p.h * GROUND_TILT).fill({ color: 0xffd23f, alpha: 0.14 });
@@ -531,7 +596,6 @@ export class WorldRenderer implements FxSink {
     this.layers.scenery.removeChildren();
     const glowSpots: Array<{ x: number; ry: number; tint: number; scale: number; alpha: number }> = [];
 
-    const GLOWING_PROPS = new Set(['sp_reactor', 'sp_generator', 'sp_hub']);
     const setPieceSpots: Array<{ x: number; y: number }> = [];
     this.setPieceNames.length = 0;
     for (const sp of w.setPieces) {
@@ -673,6 +737,41 @@ export class WorldRenderer implements FxSink {
         this.layers.scenery.addChild(s);
       }
     }
+    // terrain patches as native-res textured blobs (ice panes / goo pools) — 3/4 depth, not flat paint
+    this.gooSpots.length = 0;
+    for (const p of w.patches) {
+      if (p.kind === 'slick') continue;
+      const s = new Sprite(patchTexture(p.kind, p.r));
+      s.anchor.set(0.5);
+      s.position.set(Math.round(p.x), Math.round(p.y * GROUND_TILT));
+      s.alpha = 0.62;
+      this.layers.scenery.addChild(s);
+      if (p.kind === 'goo') this.gooSpots.push({ x: p.x, y: p.y, r: p.r });
+    }
+    // the spawn plaza gets an authored emblem — the arena's centerpiece
+    {
+      const ex = SPAWN_X;
+      const ey = SPAWN_Y * GROUND_TILT;
+      pg.circle(ex, ey, 84).stroke({ width: 4, color: 0xffd23f, alpha: 0.4 });
+      pg.circle(ex, ey, 84).stroke({ width: 12, color: 0x000000, alpha: 0.18 });
+      for (let a = 0; a < 8; a++) {
+        const rad = (a / 8) * Math.PI * 2 + Math.PI / 8;
+        const x1 = ex + Math.cos(rad) * 96;
+        const y1 = ey + Math.sin(rad) * 96 * GROUND_TILT;
+        pg.circle(x1, y1, 5).fill({ color: 0xffd23f, alpha: 0.5 });
+      }
+      // inner chevron cross pointing at the four gates
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const bx = ex + dx * 46;
+        const by = ey + dy * 46 * GROUND_TILT;
+        pg.moveTo(bx - dy * 12 - dx * 8, by - dx * 12 * GROUND_TILT - dy * 8 * GROUND_TILT);
+        pg.lineTo(bx + dx * 10, by + dy * 10 * GROUND_TILT);
+        pg.lineTo(bx + dy * 12 - dx * 8, by + dx * 12 * GROUND_TILT - dy * 8 * GROUND_TILT);
+        pg.stroke({ width: 4, color: 0xffd23f, alpha: 0.45 });
+      }
+      pg.circle(ex, ey, 14).fill({ color: 0xffd23f, alpha: 0.22 });
+    }
+
     // glow pools under bumpers, jump pads, shrines
     for (const b of w.bumpers) glowSpots.push({ x: b.x, ry: b.y * GROUND_TILT, tint: 0xff7a9a, scale: b.r * 3.4, alpha: 0.16 });
     for (const j of w.jumpPads) glowSpots.push({ x: j.x, ry: j.y * GROUND_TILT, tint: 0x57e389, scale: 78, alpha: 0.15 });
@@ -694,7 +793,7 @@ export class WorldRenderer implements FxSink {
     }
     this.glowBaseAlpha = this.glowSprites.map((s) => (s.visible ? s.alpha : 0));
 
-    // terraces: raised top face + south-facing skirt + accent edge
+    // terraces: raised top face + south-facing skirt + accent edge + plated deck
     const tg = this.layers.terraces;
     tg.clear();
     for (const t of w.terraces) {
@@ -709,6 +808,21 @@ export class WorldRenderer implements FxSink {
       tg.rect(x, y, 2, th).fill({ color: 0x9fb4d8, alpha: 0.3 });
       tg.rect(x + tw - 2, y, 2, th).fill({ color: 0x9fb4d8, alpha: 0.3 });
       tg.rect(x, y + th, tw, 2).fill({ color: 0x9fb4d8, alpha: 0.5 });
+      // plated deck: panel seams + bolt dots so the platform reads as built, not painted
+      for (let sx = x + 48; sx < x + tw - 24; sx += 64) {
+        tg.rect(sx, y + 4, 2, th - 8).fill({ color: 0x9fb4d8, alpha: 0.14 });
+      }
+      for (let sy = y + 44; sy < y + th - 20; sy += 72) {
+        tg.rect(x + 4, sy, tw - 8, 2).fill({ color: 0x9fb4d8, alpha: 0.14 });
+        for (let bx = x + 24; bx < x + tw - 16; bx += 96) {
+          tg.circle(bx, sy + 8, 2).fill({ color: 0x9fb4d8, alpha: 0.3 });
+          tg.circle(bx + 48, sy + 8, 2).fill({ color: 0x9fb4d8, alpha: 0.3 });
+        }
+      }
+      // hazard chips along the open south edge (fall risk)
+      for (let hx = x + 20; hx < x + tw - 20; hx += 56) {
+        tg.rect(hx, y + th + 2, 26, 3).fill({ color: 0xffd23f, alpha: 0.28 });
+      }
     }
 
     // obstacle sprites: assign texture + tint per run
@@ -1355,6 +1469,33 @@ export class WorldRenderer implements FxSink {
         if (!inView(v.x, v.y, 40)) continue;
         if (this.rng() < 0.35) {
           this.particles.spawn(v.x + (this.rng() - 0.5) * 12, v.y * GROUND_TILT, (this.rng() - 0.5) * 14, -36 - this.rng() * 28, 1.5, 1.2, 0x9aa8c8, -12, 0);
+        }
+      }
+    }
+    // goo pools burp bubbles — communicates the slow hazard
+    for (const g of this.gooSpots) {
+      if (!inView(g.x, g.y, 60)) continue;
+      if (this.rng() < 0.1) {
+        const a = this.rng() * Math.PI * 2;
+        const d = this.rng() * g.r * 0.7;
+        this.particles.spawn(g.x + Math.cos(a) * d, (g.y + Math.sin(a) * d) * GROUND_TILT, 0, -14 - this.rng() * 10, 0.9, 0.9, 0xa89050, -6, 0);
+      }
+    }
+    // treasure glints + reactor sparks: rarity and power get their own light language
+    this.glintAcc -= dt;
+    if (this.glintAcc <= 0) {
+      this.glintAcc = 0.4;
+      for (let i = 0; i < w.oCount; i++) {
+        if (w.otype[i] !== OBST_CHEST || !inView(w.ox[i], w.oy[i], 60)) continue;
+        if (this.rng() < 0.5) {
+          this.particles.spawn(w.ox[i] + (this.rng() - 0.5) * 16, (w.oy[i] - 10) * GROUND_TILT, 0, -8, 0.5, 0.8, 0xffe9a8, 0, 0);
+        }
+      }
+      for (const sp of w.setPieces) {
+        if (!GLOWING_PROPS.has(sp.name) || !inView(sp.x, sp.y, 80)) continue;
+        if (this.rng() < 0.45) {
+          const b = w.zoneAt(sp.x, sp.y).biome.accent;
+          this.particles.spawn(sp.x + (this.rng() - 0.5) * 26, (sp.y - 30 - this.rng() * 20) * GROUND_TILT, (this.rng() - 0.5) * 20, -20 - this.rng() * 30, 0.7, 0.9, b, 20, 0);
         }
       }
     }
