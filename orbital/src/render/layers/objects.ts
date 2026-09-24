@@ -8,7 +8,7 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { World } from '../../sim/types';
 import type { PinGhost } from '../api';
-import { clamp, expDamp, mixRGB } from '../core';
+import { beaconPulse, clamp, expDamp, mixRGB } from '../core';
 import { AMBER, DANGER, GREEN, GREEN_WARM, TexFactory } from '../textures';
 
 const PAIR_COLORS = [0x7fd8e8, 0xe8a06f, 0xc9a0ff, 0x8affc1];
@@ -51,14 +51,16 @@ export class ObjectsLayer {
   private fragments: { root: Container; shard: Sprite; spark: Sprite; phase: number }[] = [];
   private debris: Sprite[] = [];
   private hole = new Container();
-  private holeShade!: Sprite;   // dark backing halo — punches the cup out of sun glare
+  private holeShade!: Sprite;   // dark backing halo — punches the green out of glare
+  private greenPad!: Sprite;    // THE lit putting green (structural landmark)
+  private greenBands!: Sprite;  // additive mown-band shimmer over the pad
   private holeRing!: Sprite;
-  private holeGlow!: Sprite;
   private holeCup!: Sprite;
   private holeFlagC!: Container;
   private holeFlag!: Sprite;
   private holeCapture!: Sprite;
-  private holeBeacon!: Sprite;  // ~4 s pulse ring: instant findability, not neon
+  private holeBeacon!: Sprite;  // deterministic pulse ring (core.beaconPulse)
+  private holeShaft!: Sprite;   // soft vertical light above the cup
   private flagGlow!: Sprite;
   private holePole!: Graphics;
   private pins: PinView[] = [];
@@ -71,6 +73,7 @@ export class ObjectsLayer {
   private lastHoleX = 0;
   private lastHoleY = 0;
   private holeCapR = 16;
+  private beaconOut = { d: 0, a: 0 };
 
   constructor(tex: TexFactory) {
     this.tex = tex;
@@ -357,29 +360,41 @@ export class ObjectsLayer {
     this.holeCapture.width = this.holeCapture.height = cap * 3.4;
     this.holeCup.width = this.holeCup.height = cap * 1.7;
     this.holeRing.width = this.holeRing.height = cap * 2.5;
-    // dark backing: ~2.5x the capture radius in diameter
-    this.holeShade.width = this.holeShade.height = cap * 5;
+    // the lit green: ~112 world units across (100-120 target) at default capture
+    const pad = cap * 7;
+    this.greenPad.width = this.greenPad.height = pad;
+    this.greenBands.width = this.greenBands.height = pad;
+    // dark backing extends past the pad so its edge melts into darkness
+    this.holeShade.width = this.holeShade.height = cap * 9.2;
+    this.holeShaft.width = cap * 3.2;
+    this.holeShaft.height = cap * 9;
 
     this.syncPins(w);
   }
 
   private buildHole(): void {
     const h = this.hole;
-    // dark backing halo (soft, ~2.5x capture radius once capture-scaled) —
-    // makes the green punch out of sun glare, pale aurora, anything bright
+    // dark backing halo — the lit green sits on a dark disc so it punches out
+    // of sun glare, pale aurora, anything bright
     this.holeShade = new Sprite(this.tex.glow(128));
     this.holeShade.anchor.set(0.5);
     this.holeShade.tint = 0x03060a;
-    this.holeShade.alpha = 0.6;
-    this.holeShade.width = 90;
-    this.holeShade.height = 90;
-    // soft green patch — "the green", a place, not a target
-    this.holeGlow = new Sprite(this.tex.glow(128));
-    this.holeGlow.anchor.set(0.5);
-    this.holeGlow.tint = GREEN;
-    this.holeGlow.alpha = 0.16;
-    this.holeGlow.width = 170;
-    this.holeGlow.height = 170;
+    this.holeShade.alpha = 0.66;
+    this.holeShade.width = 145;
+    this.holeShade.height = 145;
+    // THE GREEN: a lit putting pad (~112 world across) with mown bands and
+    // radial falloff — the brightest warm landmark in every level
+    this.greenPad = new Sprite(this.tex.greenPad(512));
+    this.greenPad.anchor.set(0.5);
+    this.greenPad.alpha = 1;
+    this.greenPad.width = 112;
+    this.greenPad.height = 112;
+    this.greenBands = new Sprite(this.tex.greenBands(512));
+    this.greenBands.anchor.set(0.5);
+    this.greenBands.blendMode = 'add';
+    this.greenBands.alpha = 0.14;
+    this.greenBands.width = 112;
+    this.greenBands.height = 112;
     // capture radius — barely-there dashed hint
     this.holeCapture = new Sprite(this.tex.ringDashed(128, 20));
     this.holeCapture.anchor.set(0.5);
@@ -387,7 +402,7 @@ export class ObjectsLayer {
     this.holeCapture.alpha = 0.15;
     this.holeCapture.width = 100;
     this.holeCapture.height = 100;
-    // dark cup
+    // dark cup — maximum contrast against the lit pad
     this.holeCup = new Sprite(this.tex.dot(64));
     this.holeCup.anchor.set(0.5);
     this.holeCup.tint = 0x0a150e;
@@ -399,11 +414,20 @@ export class ObjectsLayer {
     this.holeRing.tint = mixRGB(GREEN, 0xffffff, 0.55);
     this.holeRing.width = 34;
     this.holeRing.height = 34;
-    // beacon pulse: one pooled ring, cycled off the sim clock in update()
+    // beacon pulse: one pooled ring, pure phase function (core.beaconPulse)
     this.holeBeacon = new Sprite(this.tex.ringThin(128, 8));
     this.holeBeacon.anchor.set(0.5);
     this.holeBeacon.tint = mixRGB(GREEN, 0xffffff, 0.3);
     this.holeBeacon.alpha = 0;
+    // soft vertical light shaft above the cup (anti-glare, "last light")
+    this.holeShaft = new Sprite(this.tex.shaft(96, 256));
+    this.holeShaft.anchor.set(0.5, 1);
+    this.holeShaft.blendMode = 'add';
+    this.holeShaft.tint = 0xd9f2d0;
+    this.holeShaft.alpha = 0.16;
+    this.holeShaft.width = 51;
+    this.holeShaft.height = 144;
+    this.holeShaft.position.set(0, -4);
     // soft light behind the flag head — reads against any sky
     this.flagGlow = new Sprite(this.tex.glow(64));
     this.flagGlow.anchor.set(0.5);
@@ -426,8 +450,9 @@ export class ObjectsLayer {
     this.holeFlag.scale.set(1.05);
     this.holeFlagC.addChild(this.holePole, this.holeFlag);
     h.addChild(
-      this.holeShade, this.holeGlow, this.holeCapture, this.holeCup,
-      this.holeRing, this.holeBeacon, this.flagGlow, this.holeFlagC,
+      this.holeShade, this.greenPad, this.greenBands, this.holeCapture,
+      this.holeCup, this.holeRing, this.holeBeacon, this.holeShaft,
+      this.flagGlow, this.holeFlagC,
     );
   }
 
@@ -592,26 +617,23 @@ export class ObjectsLayer {
       }
     }
 
-    // --- THE HOLE: warm-lit green, flag waving; brightens as Milo approaches
+    // --- THE HOLE: the lit green breathes very slightly; the mown-band
+    // shimmer drifts out of phase (slow, subtle, alive)
     this.hole.x = w.holeX;
     this.hole.y = w.holeY;
     this.holeRing.rotation += dt * 0.2;
     const near = 1 - clamp(Math.hypot(w.ball.x - w.holeX, w.ball.y - w.holeY) / 140, 0, 1);
-    this.holeGlow.alpha = 0.16 + near * 0.24 + Math.sin(this.t * 1.3) * 0.02;
+    this.greenPad.alpha = 0.96 + Math.sin(this.t * 0.4) * 0.04; // always lit
+    const padScale = 1 + Math.sin(this.t * 0.4 + 1.1) * 0.018;
+    this.greenBands.scale.set(padScale);
+    this.greenBands.alpha = 0.12 + near * 0.08;
     this.holeCapture.alpha = 0.1 + near * 0.2;
-    // beacon pulse: 1.2 s expansion every 4 s, phased off the SIM clock so it
-    // is deterministic per level attempt; one pooled sprite, gentle opacity
-    {
-      const c = w.t % 4;
-      if (c < 1.2) {
-        const f = c / 1.2;
-        const d = this.holeCapR * (2.8 + f * 3.6); // expands from just outside the cup ring
-        this.holeBeacon.width = this.holeBeacon.height = d;
-        this.holeBeacon.alpha = 0.42 * Math.sin(Math.PI * f);
-      } else {
-        this.holeBeacon.alpha = 0;
-      }
-    }
+    this.holeShaft.alpha = 0.14 + Math.sin(this.t * 0.9) * 0.03;
+    this.holeShaft.rotation = Math.sin(this.t * 0.7) * 0.02;
+    // beacon pulse: pure, deterministic phase (asserted in tests) — 50% duty
+    beaconPulse(w.t, this.holeCapR, this.beaconOut);
+    this.holeBeacon.width = this.holeBeacon.height = this.beaconOut.d;
+    this.holeBeacon.alpha = this.beaconOut.a;
     // hole glides along its path — flag leans into the motion
     const holeVx = (w.holeX - this.lastHoleX) / Math.max(dt, 1e-4);
     const holeVy = (w.holeY - this.lastHoleY) / Math.max(dt, 1e-4);

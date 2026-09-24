@@ -26,7 +26,8 @@ ORBITAL: gravity is drawn, audible, and sculptable; the diorama feels like a pla
   ~183 u/s. Levels are tuned around capture speeds of 120–260 u/s.
 - **Ball vs body collision:** reflect off the surface, restitution 0.55, tangential
   damping 0.92. Landing slow (< 30 u/s and local field weak) → ball settles → stroke ends.
-- **Hole:** capture radius 16, sink if entry speed < 260 u/s, else a "lip out" deflection.
+- **Hole:** capture radius 20, sink if entry speed < 340 u/s; faster entries "rattle
+  out" — the cup eats the energy and the ball hops clear at ≤ 220 u/s (tap-in follows).
 - **Orbit tracking:** while bound to a dominant body, accumulate signed angle; full 2π
   fires an `orbit` event (objective + style scoring).
 - Stuck detection: kinetic energy < threshold for 3 s → stroke ends ("settled").

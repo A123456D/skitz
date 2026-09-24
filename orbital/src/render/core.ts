@@ -145,3 +145,26 @@ export function bucketSize(px: number, step: number, min: number, max: number): 
 export function bodyTextureKey(material: string, seed: number, bucketPx: number): string {
   return `body|${material}|${seed}|${bucketPx}`;
 }
+
+// --------------------------------------------------------- hole beacon pulse
+
+export const BEACON_PERIOD = 3.6;
+/** 50% duty — screenshots/attention must never land in a long dark window. */
+export const BEACON_DUTY = 1.8;
+
+/**
+ * Pure beacon state for sim time `t`: ring diameter `d` (world) and opacity
+ * `a` (0..1). Shared by the renderer and tests so the phase is assertable.
+ * Writes into `out`; zero allocation.
+ */
+export function beaconPulse(t: number, capR: number, out: { d: number; a: number }): void {
+  const c = ((t % BEACON_PERIOD) + BEACON_PERIOD) % BEACON_PERIOD;
+  if (c >= BEACON_DUTY) {
+    out.d = capR * 6.4;
+    out.a = 0;
+    return;
+  }
+  const f = c / BEACON_DUTY;
+  out.d = capR * (2.5 + f * 3.9); // expands from the cup ring outward
+  out.a = 0.55 * Math.sin(Math.PI * f);
+}

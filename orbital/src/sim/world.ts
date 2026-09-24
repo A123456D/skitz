@@ -20,14 +20,14 @@ export const STEP_DT = 1 / 60;
 export const BALL_R = 10;
 export const RESTITUTION = 0.55;
 export const TANGENT_DAMP = 0.92;
-export const SINK_SPEED = 260;
+export const SINK_SPEED = 340;
 export const SETTLE_SPEED = 8;
 export const SETTLE_TIME = 3;
 export const BOUNDS_GRACE = 1.5;
 export const PIN_MU = 1.2e6;
 export const PIN_INFLUENCE_R = 260;
 export const MAX_LAUNCH_SPEED = 900;
-export const HOLE_CAPTURE_R = 16;
+export const HOLE_CAPTURE_R = 20;
 
 const f1: FieldSample = makeFieldSample();
 const f2: FieldSample = makeFieldSample();
@@ -539,14 +539,22 @@ export function stepTick(w: World, ghost = false): void {
           w.strokeEnded = w.strokeEnded ?? 'sunk';
         }
       } else {
+        // rattle-out: a real cup eats the energy — the ball hops clear but
+        // dies nearby, leaving a tap-in instead of rocketing away
         const nx = (ball.x - w.holeX) / (hd || 1);
         const ny = (ball.y - w.holeY) / (hd || 1);
         const vn = ball.vx * nx + ball.vy * ny;
         if (vn < 0) {
-          ball.vx -= 1.5 * vn * nx;
-          ball.vy -= 1.5 * vn * ny;
-          ball.vx *= 0.6;
-          ball.vy *= 0.6;
+          const rvx = ball.vx - 2 * vn * nx;
+          const rvy = ball.vy - 2 * vn * ny;
+          const rl = Math.hypot(rvx, rvy) || 1;
+          const outSpeed = Math.min(220, Math.max(40, -vn * 0.35 + 25));
+          ball.vx = (rvx / rl) * outSpeed;
+          ball.vy = (rvy / rl) * outSpeed;
+          // clear the capture zone along the exit line, or the slow exit
+          // re-qualifies as a sink on the very next tick
+          ball.x = w.holeX + (rvx / rl) * (capture + 2);
+          ball.y = w.holeY + (rvy / rl) * (capture + 2);
           if (!ghost) w.events.push({ type: 'lipout', x: ball.x, y: ball.y, speed });
         }
       }

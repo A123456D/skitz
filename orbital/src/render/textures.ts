@@ -333,6 +333,74 @@ export class TexFactory {
     });
   }
 
+  /**
+   * The lit putting green: a warm-green pad with soft radial falloff into the
+   * dark and faint concentric mown bands. THE landmark of every level —
+   * "the only lit place left in a dead universe".
+   */
+  greenPad(size = 512): Texture {
+    return this.get(`greenpad|${size}`, size, size, (ctx, w, h) => {
+      const c = w / 2;
+      // mown bands first (alternating light/dark concentric rings)
+      const rings = 9;
+      for (let i = 0; i < rings; i++) {
+        const rr = (0.14 + (i / rings) * 0.8) * c;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(240,255,230,0.07)' : 'rgba(4,30,14,0.09)';
+        ctx.lineWidth = c * 0.055;
+        ctx.beginPath();
+        ctx.arc(c, c, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // warm radial falloff shapes everything into one soft lit pad
+      const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+      g.addColorStop(0, 'rgba(222,248,208,0.98)');
+      g.addColorStop(0.3, 'rgba(168,224,158,0.85)');
+      g.addColorStop(0.62, 'rgba(88,150,102,0.5)');
+      g.addColorStop(0.85, 'rgba(38,74,52,0.22)');
+      g.addColorStop(1, 'rgba(12,28,20,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    });
+  }
+
+  /** Concentric mown rings only — additive shimmer layer over the green pad. */
+  greenBands(size = 512): Texture {
+    return this.get(`greenbands|${size}`, size, size, (ctx, w) => {
+      const c = w / 2;
+      const rings = 7;
+      for (let i = 0; i < rings; i++) {
+        const rr = (0.18 + (i / rings) * 0.72) * c;
+        ctx.strokeStyle = 'rgba(235,255,228,0.16)';
+        ctx.lineWidth = c * 0.045;
+        ctx.beginPath();
+        ctx.arc(c, c, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+  }
+
+  /** Soft vertical light shaft (bottom bright -> top fade, soft sides). */
+  shaft(w = 96, h = 256): Texture {
+    return this.get(`shaft|${w}|${h}`, w, h, (ctx) => {
+      const g = ctx.createLinearGradient(0, h, 0, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)');
+      g.addColorStop(0.65, 'rgba(255,255,255,0.14)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      // soften the sides
+      const gh = ctx.createLinearGradient(0, 0, w, 0);
+      gh.addColorStop(0, 'rgba(0,0,0,1)');
+      gh.addColorStop(0.3, 'rgba(0,0,0,0)');
+      gh.addColorStop(0.7, 'rgba(0,0,0,0)');
+      gh.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = gh;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
   // --------------------------------------------------------------- bodies
 
   /**

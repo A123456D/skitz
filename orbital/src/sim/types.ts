@@ -114,7 +114,7 @@ export interface WormholeDef {
 export interface HoleDef {
   x: number;
   y: number;
-  captureR?: number; // default 16
+  captureR?: number; // default 20
   path?: PathDef;    // THE MOVING GREEN
 }
 

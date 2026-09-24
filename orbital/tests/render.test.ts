@@ -3,6 +3,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  BEACON_DUTY,
+  BEACON_PERIOD,
+  beaconPulse,
   bucketSize,
   bodyTextureKey,
   capToEllipse,
@@ -198,5 +201,35 @@ describe('texture cache keys', () => {
     expect(bucketSize(90, 32, 64, 1024)).toBe(96);
     expect(bucketSize(9999, 32, 64, 1024)).toBe(1024);
     expect(bucketSize(1, 32, 64, 1024)).toBe(64);
+  });
+});
+
+describe('hole beacon pulse', () => {
+  const o = { d: 0, a: 0 };
+
+  it('is visible at forced phases (no long between-pulse dead zones)', () => {
+    beaconPulse(0, 16, o);
+    expect(o.a).toBeCloseTo(0);
+    beaconPulse(0.9, 16, o); // mid-expansion
+    expect(o.a).toBeCloseTo(0.55, 5);
+    expect(o.d).toBeGreaterThan(16 * 3);
+    // 50% duty: any screenshot time in [0, 1.8) lands on a lit ring
+    beaconPulse(BEACON_DUTY * 0.5, 16, o);
+    expect(o.a).toBeGreaterThan(0.4);
+    beaconPulse(BEACON_DUTY * 0.95, 16, o);
+    expect(o.a).toBeGreaterThan(0.05);
+    beaconPulse(2.0, 16, o); // rest window
+    expect(o.a).toBe(0);
+  });
+
+  it('is exactly periodic and wrap-safe', () => {
+    beaconPulse(1.234, 16, o);
+    const d = o.d;
+    const a = o.a;
+    beaconPulse(1.234 + BEACON_PERIOD, 16, o);
+    expect(o.d).toBeCloseTo(d, 10);
+    expect(o.a).toBeCloseTo(a, 10);
+    beaconPulse(-1.234, 16, o); // negative time wraps safely
+    expect(o.a).toBeGreaterThanOrEqual(0);
   });
 });
