@@ -51,12 +51,15 @@ export class ObjectsLayer {
   private fragments: { root: Container; shard: Sprite; spark: Sprite; phase: number }[] = [];
   private debris: Sprite[] = [];
   private hole = new Container();
+  private holeShade!: Sprite;   // dark backing halo — punches the cup out of sun glare
   private holeRing!: Sprite;
   private holeGlow!: Sprite;
   private holeCup!: Sprite;
   private holeFlagC!: Container;
   private holeFlag!: Sprite;
   private holeCapture!: Sprite;
+  private holeBeacon!: Sprite;  // ~4 s pulse ring: instant findability, not neon
+  private flagGlow!: Sprite;
   private holePole!: Graphics;
   private pins: PinView[] = [];
   private ghost: Container;
@@ -67,6 +70,7 @@ export class ObjectsLayer {
   private t = 0;
   private lastHoleX = 0;
   private lastHoleY = 0;
+  private holeCapR = 16;
 
   constructor(tex: TexFactory) {
     this.tex = tex;
@@ -349,34 +353,33 @@ export class ObjectsLayer {
 
     // capture-radius hint scales with the level's actual capture size
     const cap = w.def.hole.captureR ?? 16;
+    this.holeCapR = cap;
     this.holeCapture.width = this.holeCapture.height = cap * 3.4;
     this.holeCup.width = this.holeCup.height = cap * 1.7;
-    this.holeRing.width = this.holeRing.height = cap * 2.3;
+    this.holeRing.width = this.holeRing.height = cap * 2.5;
+    // dark backing: ~2.5x the capture radius in diameter
+    this.holeShade.width = this.holeShade.height = cap * 5;
 
     this.syncPins(w);
   }
 
   private buildHole(): void {
     const h = this.hole;
+    // dark backing halo (soft, ~2.5x capture radius once capture-scaled) —
+    // makes the green punch out of sun glare, pale aurora, anything bright
+    this.holeShade = new Sprite(this.tex.glow(128));
+    this.holeShade.anchor.set(0.5);
+    this.holeShade.tint = 0x03060a;
+    this.holeShade.alpha = 0.6;
+    this.holeShade.width = 90;
+    this.holeShade.height = 90;
     // soft green patch — "the green", a place, not a target
     this.holeGlow = new Sprite(this.tex.glow(128));
     this.holeGlow.anchor.set(0.5);
     this.holeGlow.tint = GREEN;
-    this.holeGlow.alpha = 0.13;
+    this.holeGlow.alpha = 0.16;
     this.holeGlow.width = 170;
     this.holeGlow.height = 170;
-    // warm lit ring
-    this.holeRing = new Sprite(this.tex.ringThin(128, 5));
-    this.holeRing.anchor.set(0.5);
-    this.holeRing.tint = mixRGB(GREEN, 0xffffff, 0.35);
-    this.holeRing.width = 34;
-    this.holeRing.height = 34;
-    // dark cup
-    this.holeCup = new Sprite(this.tex.dot(64));
-    this.holeCup.anchor.set(0.5);
-    this.holeCup.tint = 0x0c1a10;
-    this.holeCup.width = 26;
-    this.holeCup.height = 26;
     // capture radius — barely-there dashed hint
     this.holeCapture = new Sprite(this.tex.ringDashed(128, 20));
     this.holeCapture.anchor.set(0.5);
@@ -384,17 +387,48 @@ export class ObjectsLayer {
     this.holeCapture.alpha = 0.15;
     this.holeCapture.width = 100;
     this.holeCapture.height = 100;
+    // dark cup
+    this.holeCup = new Sprite(this.tex.dot(64));
+    this.holeCup.anchor.set(0.5);
+    this.holeCup.tint = 0x0a150e;
+    this.holeCup.width = 26;
+    this.holeCup.height = 26;
+    // bright thick cup ring — the lit lip of the green
+    this.holeRing = new Sprite(this.tex.ringThin(128, 10));
+    this.holeRing.anchor.set(0.5);
+    this.holeRing.tint = mixRGB(GREEN, 0xffffff, 0.55);
+    this.holeRing.width = 34;
+    this.holeRing.height = 34;
+    // beacon pulse: one pooled ring, cycled off the sim clock in update()
+    this.holeBeacon = new Sprite(this.tex.ringThin(128, 8));
+    this.holeBeacon.anchor.set(0.5);
+    this.holeBeacon.tint = mixRGB(GREEN, 0xffffff, 0.3);
+    this.holeBeacon.alpha = 0;
+    // soft light behind the flag head — reads against any sky
+    this.flagGlow = new Sprite(this.tex.glow(64));
+    this.flagGlow.anchor.set(0.5);
+    this.flagGlow.tint = GREEN_WARM;
+    this.flagGlow.blendMode = 'add';
+    this.flagGlow.alpha = 0.3;
+    this.flagGlow.width = 46;
+    this.flagGlow.height = 46;
+    this.flagGlow.position.set(0, -26);
     // flag pin
     this.holeFlagC = new Container();
     this.holePole = new Graphics();
-    this.holePole.rect(-1, -34, 2, 40).fill({ color: 0xd8d2c4, alpha: 0.95 });
+    this.holePole.rect(-1.2, -34, 2.4, 40).fill({ color: 0xf2ecdc, alpha: 1 });
+    // light pole cap
+    this.holePole.rect(-2.6, -35.5, 5.2, 3.2).fill({ color: 0xffffff, alpha: 0.95 });
     this.holeFlag = new Sprite(this.tex.flag(30, 20));
     this.holeFlag.anchor.set(0, 0);
     this.holeFlag.position.set(1, -34);
-    this.holeFlag.tint = GREEN_WARM;
-    this.holeFlag.scale.set(0.9);
+    this.holeFlag.tint = 0xbef2c8; // brighter pennant; dark outline baked in texture
+    this.holeFlag.scale.set(1.05);
     this.holeFlagC.addChild(this.holePole, this.holeFlag);
-    h.addChild(this.holeGlow, this.holeCapture, this.holeCup, this.holeRing, this.holeFlagC);
+    h.addChild(
+      this.holeShade, this.holeGlow, this.holeCapture, this.holeCup,
+      this.holeRing, this.holeBeacon, this.flagGlow, this.holeFlagC,
+    );
   }
 
   private buildGhost(): void {
@@ -563,8 +597,21 @@ export class ObjectsLayer {
     this.hole.y = w.holeY;
     this.holeRing.rotation += dt * 0.2;
     const near = 1 - clamp(Math.hypot(w.ball.x - w.holeX, w.ball.y - w.holeY) / 140, 0, 1);
-    this.holeGlow.alpha = 0.12 + near * 0.22 + Math.sin(this.t * 1.3) * 0.02;
+    this.holeGlow.alpha = 0.16 + near * 0.24 + Math.sin(this.t * 1.3) * 0.02;
     this.holeCapture.alpha = 0.1 + near * 0.2;
+    // beacon pulse: 1.2 s expansion every 4 s, phased off the SIM clock so it
+    // is deterministic per level attempt; one pooled sprite, gentle opacity
+    {
+      const c = w.t % 4;
+      if (c < 1.2) {
+        const f = c / 1.2;
+        const d = this.holeCapR * (2.8 + f * 3.6); // expands from just outside the cup ring
+        this.holeBeacon.width = this.holeBeacon.height = d;
+        this.holeBeacon.alpha = 0.42 * Math.sin(Math.PI * f);
+      } else {
+        this.holeBeacon.alpha = 0;
+      }
+    }
     // hole glides along its path — flag leans into the motion
     const holeVx = (w.holeX - this.lastHoleX) / Math.max(dt, 1e-4);
     const holeVy = (w.holeY - this.lastHoleY) / Math.max(dt, 1e-4);

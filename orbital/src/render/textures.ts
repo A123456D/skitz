@@ -291,16 +291,21 @@ export class TexFactory {
     });
   }
 
-  /** Mini flag for the hole & the 'sunk' preview marker (pole drawn by layer). */
+  /** Mini flag for the hole & the 'sunk' preview marker (pole drawn by layer).
+   *  Dark pennant outline keeps it readable over bright sun glow. */
   flag(w = 30, h = 20): Texture {
     return this.get(`flag|${w}|${h}`, w, h, (ctx) => {
       ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(16,22,20,0.9)';
+      ctx.lineWidth = 2.4;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(1, 1);
-      ctx.lineTo(w - 1, h * 0.5);
-      ctx.lineTo(1, h - 1);
+      ctx.moveTo(1.5, 1.5);
+      ctx.lineTo(w - 1.5, h * 0.5);
+      ctx.lineTo(1.5, h - 1.5);
       ctx.closePath();
       ctx.fill();
+      ctx.stroke();
     });
   }
 
