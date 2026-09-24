@@ -62,10 +62,12 @@ export class PostFx {
   private gradeTo: ColorMatrix;
   private gradeT = 1;
   private baseVignetteAlpha = 0;
+  /** lite mode (phones): chroma off, softer bloom/vignette — `?fx=full` opts out */
+  private lite: boolean;
 
   constructor(app: Application, worldRoot: Container, isMobile: boolean) {
-    this.bloom = new GlowFilter({ threshold: 0.55, strength: isMobile ? 0.7 : 0.9 });
-    this.bloom.resolution = 0.5; // bloom is soft — render it half-res
+    this.bloom = new GlowFilter({ threshold: 0.55, strength: isMobile ? 0.55 : 0.9 });
+    this.bloom.resolution = isMobile ? 0.65 : 0.5; // bloom is soft — render sub-res
     this.grade = new ColorMatrixFilter();
     this.rgb = new ChromaticFilter();
 
@@ -73,12 +75,13 @@ export class PostFx {
     this.gradeTo = gradeMatrix({ sat: 1, con: 1, bright: 1, tint: [1, 1, 1] });
     this.grade.matrix = this.gradeFrom;
 
-    this.root.filters = [this.bloom, this.grade, this.rgb];
+    this.lite = isMobile;
+    this.root.filters = isMobile ? [this.bloom, this.grade] : [this.bloom, this.grade, this.rgb];
     this.root.addChild(worldRoot);
 
     this.vignette = new Sprite(radialTexture());
     this.vignette.anchor.set(0.5);
-    this.vignette.alpha = 0.85;
+    this.vignette.alpha = isMobile ? 0.45 : 0.85;
     this.overlay.addChild(this.vignette);
 
     app.stage.addChild(this.root);
@@ -91,7 +94,7 @@ export class PostFx {
     this.gradeT = 0;
     this.vignette.tint = b.vignetteTint;
     this.baseVignetteAlpha = b.vignetteAlpha;
-    this.vignette.alpha = this.baseVignetteAlpha;
+    this.vignette.alpha = this.lite ? Math.min(0.45, this.baseVignetteAlpha * 0.6) : this.baseVignetteAlpha;
   }
 
   /** Chromatic pulse on big impacts; force 0..1+. */
@@ -113,10 +116,10 @@ export class PostFx {
   }
 
   update(dt: number): void {
-    // chromatic aberration decays exponentially
+    // chromatic aberration decays exponentially (disabled in lite mode)
     this.chromaTarget = Math.max(0, this.chromaTarget - dt * 3.2);
     this.chroma += (this.chromaTarget - this.chroma) * Math.min(1, dt * 22);
-    const c = this.chroma * 0.007;
+    const c = this.lite ? 0 : this.chroma * 0.007;
     this.rgb.split = [-c, c * 0.22, c, -c * 0.22];
 
     // biome grade crossfade

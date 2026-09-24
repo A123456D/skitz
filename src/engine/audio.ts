@@ -1,11 +1,15 @@
 /**
  * Tiny WebAudio synth — zero-asset SFX core, optionally layered with
  * ElevenLabs-generated samples (build-time assets in public/audio/sfx, the API
- * key never ships). Unlocked on first user interaction. Music: procedural
- * sequencer (engine/music.ts) on its own bus; intensity gates layers, not
- * volume. Master runs through a compressor so full-screen chaos doesn't clip.
+ * key never ships). Music: ElevenLabs-generated biome loops
+ * (public/audio/music) when loaded, else the procedural sequencer
+ * (engine/music.ts) — both on their own bus. Master runs through a compressor
+ * so full-screen chaos doesn't clip.
  */
 import { MusicSystem } from './music';
+
+const SFX_NAMES = ['bonk_heavy', 'slam_ground', 'boss_roar', 'crate_break', 'chest_open', 'bumper_fling', 'victory', 'steam_vent', 'levelup_chime', 'death_wreck', 'descend_drop'];
+const MUSIC_BIOMES = ['iron', 'frost', 'rust', 'ember'];
 
 export class AudioSys {
   private ctx: AudioContext | null = null;
@@ -16,6 +20,14 @@ export class AudioSys {
   private music = new MusicSystem();
   private samples = new Map<string, AudioBuffer>();
   private samplesLoading = false;
+  /** ElevenLabs biome loops: biome id -> decoded buffer */
+  private loops = new Map<string, AudioBuffer>();
+  /** the live loop source (null while the synth sequencer owns the bus) */
+  private loopSrc: AudioBufferSourceNode | null = null;
+  private loopBiome: string | null = null;
+  private loopLevel = 0;
+  /** biome requested while its loop was still decoding — swapped when ready */
+  private pendingBiome: string | null = null;
   sfxOn = true;
   musicOn = true;
 
@@ -42,14 +54,13 @@ export class AudioSys {
     this.loadSamples();
   }
 
-  /** Fetch + decode the generated SFX set. Every sample is optional — the
-   *  synth covers all calls when a file is missing (e.g. offline dev). */
+  /** Fetch + decode the generated SFX set + biome music loops. Every asset is
+   *  optional — the synth covers all calls when a file is missing. */
   private loadSamples(): void {
     if (this.samplesLoading || !this.ctx) return;
     this.samplesLoading = true;
-    const names = ['bonk_heavy', 'slam_ground', 'boss_roar', 'crate_break', 'chest_open', 'bumper_fling', 'victory'];
     void (async () => {
-      for (const n of names) {
+      for (const n of SFX_NAMES) {
         try {
           const res = await fetch(`./audio/sfx/${n}.mp3`);
           if (!res.ok) continue;
@@ -58,6 +69,21 @@ export class AudioSys {
         } catch {
           // sample optional — synth fallback stands
         }
+      }
+      for (const b of MUSIC_BIOMES) {
+        try {
+          const res = await fetch(`./audio/music/${b}.mp3`);
+          if (!res.ok) continue;
+          const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
+          this.loops.set(b, buf);
+        } catch {
+          // loop optional — synth sequencer stands
+        }
+      }
+      // a run started before decoding finished: hand the synth's bus over now
+      if (this.pendingBiome && this.tryStartLoop(this.pendingBiome)) {
+        this.pendingBiome = null;
+        this.music.stop();
       }
     })();
   }
@@ -85,26 +111,79 @@ export class AudioSys {
     return true;
   }
 
-  /** Start the procedural music loop for a biome (no-op until unlocked). */
+  /** Start music for a biome: ElevenLabs loop when loaded, else the synth
+   *  sequencer. No-op until unlocked. */
   startMusic(biomeId: string): void {
     if (!this.ctx || !this.musicGain) return;
+    if (this.tryStartLoop(biomeId)) {
+      this.pendingBiome = null;
+      return;
+    }
+    this.pendingBiome = biomeId; // loop may still be decoding — swap when ready
     this.music.start(this.ctx, this.musicGain, biomeId);
     this.applyMusicVolume(0.4);
   }
 
-  /** Zone change: crossfade to the new biome's theme at the next bar. */
+  /** Zone change: swap the biome loop (or crossfade the synth theme). */
   setMusicTheme(biomeId: string): void {
+    this.pendingBiome = null;
+    if (this.loops.size > 0) {
+      if (this.tryStartLoop(biomeId)) return;
+      // no loop for this biome — drop any stale loop, hand over to the synth
+      this.stopLoop();
+    }
     this.music.setTheme(biomeId);
   }
 
-  /** Threat level 0..3 — gates music layers. */
+  /** Threat level 0..3 — gates synth layers / swells the loop volume. */
   setMusicIntensity(level: number): void {
     this.music.setIntensity(level);
+    this.loopLevel = level;
+    if (this.loopSrc) this.applyLoopVolume();
   }
 
   stopMusic(): void {
+    this.stopLoop();
     this.music.stop();
     this.applyMusicVolume(0);
+  }
+
+  /** Start a looping biome track; false when that biome has no loop loaded. */
+  private tryStartLoop(biomeId: string): boolean {
+    const buf = this.loops.get(biomeId);
+    if (!buf || !this.ctx || !this.musicGain) return false;
+    if (this.loopBiome === biomeId && this.loopSrc) return true;
+    this.stopLoop();
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const g = this.ctx.createGain();
+    g.gain.value = 0;
+    src.connect(g).connect(this.musicGain);
+    src.start();
+    this.loopSrc = src;
+    this.loopBiome = biomeId;
+    this.applyLoopVolume();
+    return true;
+  }
+
+  private applyLoopVolume(): void {
+    if (!this.ctx) return;
+    const g = this.loopSrc ? this.loopVolumeTarget() : 0;
+    this.musicGain!.gain.setTargetAtTime(this.musicOn ? g : 0, this.ctx.currentTime, 0.6);
+  }
+
+  /** threat 0..3 → 0.4..0.58 — the loop breathes a little with the action */
+  private loopVolumeTarget(): number {
+    return 0.4 + Math.min(3, this.loopLevel) * 0.06;
+  }
+
+  private stopLoop(): void {
+    if (!this.loopSrc) return;
+    try { this.loopSrc.stop(); } catch { /* already stopped */ }
+    this.loopSrc.disconnect();
+    this.loopSrc = null;
+    this.loopBiome = null;
   }
 
   private applyMusicVolume(target: number): void {
@@ -163,12 +242,17 @@ export class AudioSys {
   gem(): void { if (this.gate('gem', 60)) this.tone(880, 0.07, 'square', 0.06, 1320); }
   gold(): void { if (this.gate('gold', 80)) this.tone(1046, 0.09, 'square', 0.07, 1568); }
   levelup(): void {
+    if (this.playSample('levelup_chime', 0.2)) return;
     this.tone(523, 0.1, 'square', 0.09);
     setTimeout(() => this.tone(659, 0.1, 'square', 0.09), 90);
     setTimeout(() => this.tone(784, 0.14, 'square', 0.1), 180);
   }
   hurt(): void { this.tone(200, 0.16, 'sawtooth', 0.16, 80); }
-  die(): void { this.tone(300, 0.4, 'sawtooth', 0.2, 40); }
+  die(): void {
+    if (this.playSample('death_wreck', 0.3)) return;
+    this.tone(300, 0.4, 'sawtooth', 0.2, 40);
+  }
+  descend(): void { this.playSample('descend_drop', 0.3); }
   boss(): void { this.tone(60, 0.8, 'sawtooth', 0.3, 30); this.noise(0.5, 0.2, 500); this.playSample('boss_roar', 0.34, 0.92 + Math.random() * 0.12); }
   win(): void {
     this.playSample('victory', 0.24);

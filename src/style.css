@@ -446,3 +446,21 @@ html, body {
 }
 /* dev/QA escape: ?forcemobile=1 previews the gate on desktop */
 body.force-portrait #rotate-overlay { display: flex; }
+
+/* ---------- fullscreen button (HUD, beside pause) ---------- */
+#fs-btn {
+  position: absolute;
+  bottom: calc(var(--ui-scale) * 0.8 + var(--sab));
+  right: calc(44px + var(--ui-scale) * 1.4 + var(--sar));
+  pointer-events: auto;
+  width: 44px; height: 44px;
+  font-size: 17px;
+  background: #0008;
+  border: 2px solid var(--panel-edge);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+}
+#fs-btn:active { border-color: var(--accent); }
+/* iOS Safari has no element fullscreen — hide the dead control */
+#fs-btn.hidden { display: none; }

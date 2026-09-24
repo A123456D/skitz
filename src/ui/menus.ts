@@ -63,6 +63,7 @@ export function showTitle(): void {
       <button class="btn" id="m-shop">UPGRADES</button>
       <button class="btn" id="m-sfx">SFX: ${s.settings.sfx ? 'ON' : 'OFF'}</button>
     </div>
+    <div class="row"><button class="btn" id="m-fs" style="min-width:0;padding:calc(var(--ui-scale)*0.8) calc(var(--ui-scale)*1.4);font-size:calc(var(--ui-scale)*0.9);">⛶ FULLSCREEN</button></div>
     <div class="stat-line">BEST: ${fmtTime(s.best.time)} · ${s.best.kills} KILLS · LV ${s.best.level}${s.best.wins > 0 ? ` · ${s.best.wins} WIN${s.best.wins > 1 ? 'S' : ''}` : ''}${s.best.depth > 0 ? ` · DEPTH ${s.best.depth}` : ''}</div>
     <div class="subtitle" style="opacity:0.7">WASD / ARROWS / TOUCH STICK · AUTO-ATTACKS FIRE THEMSELVES</div>`;
   el.querySelector('#m-play')!.addEventListener('click', () => { audio.click(); hooks?.onPlay(); });
@@ -75,6 +76,23 @@ export function showTitle(): void {
     (e.currentTarget as HTMLElement).textContent = `SFX: ${s.settings.sfx ? 'ON' : 'OFF'}`;
     audio.click();
   });
+  const fsBtn = el.querySelector('#m-fs') as HTMLElement | null;
+  if (fsBtn) {
+    if (!document.fullscreenEnabled) fsBtn.style.display = 'none';
+    fsBtn.addEventListener('click', () => {
+      audio.click();
+      const doc = document as Document & { webkitFullscreenElement?: Element };
+      const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+      if (document.fullscreenElement ?? doc.webkitFullscreenElement) void document.exitFullscreen();
+      else {
+        const req = root.requestFullscreen?.() ?? root.webkitRequestFullscreen?.();
+        void req?.then(() => {
+          const so = screen.orientation as (ScreenOrientation & { lock?: (o: string) => Promise<void> }) | undefined;
+          try { void so?.lock?.('landscape'); } catch { /* unsupported */ }
+        }).catch(() => { /* denied */ });
+      }
+    });
+  }
 }
 
 // ---------------- character select ----------------

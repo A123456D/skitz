@@ -51,6 +51,7 @@ export function buildHud(): void {
     <div id="toast"></div>
     <div id="hurt-vignette" style="position:absolute;inset:0;pointer-events:none;opacity:0;box-shadow: inset 0 0 120px 40px rgba(255,40,70,0.55);transition:opacity 120ms;"></div>
   </div>
+  <button id="fs-btn" aria-label="fullscreen">⛶</button>
   <button id="pause-btn" aria-label="pause">II</button>`);
 
   const q = (id: string) => document.getElementById(id)!;
@@ -75,6 +76,10 @@ export function buildHud(): void {
 
 export function hudPauseButton(): HTMLElement {
   return document.getElementById('pause-btn')!;
+}
+
+export function hudFullscreenButton(): HTMLElement {
+  return document.getElementById('fs-btn')!;
 }
 
 export function toast(msg: string, ms = 1400): void {

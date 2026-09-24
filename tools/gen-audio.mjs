@@ -29,6 +29,9 @@ const SFX = [
   { name: 'bumper_fling', text: 'Pinball machine bumper thump, springy rubber boing kick, arcade pop', dur: 1.5 },
   { name: 'victory', text: 'Short triumphant arcade victory fanfare, bright retro synth brass, four rising notes, confident ending', dur: 3 },
   { name: 'steam_vent', text: 'Short steam valve release hiss, airy pneumatic puff, industrial machinery', dur: 2 },
+  { name: 'levelup_chime', text: 'Bright arcade level up chime, rising three note fanfare, sparkling retro synth, celebratory video game sound', dur: 2 },
+  { name: 'death_wreck', text: 'Massive metal wreck crashing down, deep crushing impact with scattering debris, defeat thunk, dramatic', dur: 3 },
+  { name: 'descend_drop', text: 'Deep ominous descending tone, elevator dropping into abyss, dark riser reversing downward, eerie video game transition', dur: 3 },
 ];
 
 for (const sfx of SFX) {

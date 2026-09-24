@@ -14,7 +14,7 @@ import { unlockDef } from './game/data/unlocks';
 import { BIOMES } from './game/data/biomes';
 import type { PendingChoice } from './game/state';
 import { getSave, recordRun, addGold, grantDepthUnlocks } from './save/save';
-import { buildHud, hurtFlash, hudPauseButton, toast, updateHud } from './ui/hud';
+import { buildHud, hurtFlash, hudFullscreenButton, hudPauseButton, toast, updateHud } from './ui/hud';
 import { hideLevelUp, initLevelUp, showLevelUp } from './ui/levelup';
 import { hideAllScreens, initMenus, showCharSelect, showEnd, showPause, showShop, showTitle } from './ui/menus';
 import { initTouchUi, updateTouchUi } from './ui/touch';
@@ -66,8 +66,12 @@ async function boot(): Promise<void> {
   renderer.skin = getSave().skin;
   renderer.initPlayerSprite();
   // GPU post stack (bloom/grade/chromatic/vignette) — ?fx=0 disables for A/B
-  if (new URLSearchParams(location.search).get('fx') !== '0') {
-    post = new PostFx(app, renderer.root, isMobile);
+  const search = new URLSearchParams(location.search);
+  // GPU post stack (bloom/grade/chromatic/vignette) — ?fx=0 disables for A/B;
+  // phones run lite (no chroma, softer bloom/vignette) unless ?fx=full
+  if (search.get('fx') !== '0') {
+    const liteFx = isMobile && search.get('fx') !== 'full';
+    post = new PostFx(app, renderer.root, liteFx);
     renderer.onScreenImpact = (f) => post?.screenImpact(f);
     renderer.onBossKill = () => {
       post?.bossKill();
@@ -156,10 +160,31 @@ async function boot(): Promise<void> {
     if (phase === 'running') pauseRun();
     else if (phase === 'paused') resumeRun();
   });
+  // fullscreen: hide browser chrome (the main mobile complaint). iOS Safari has
+  // no element fullscreen — hide the button there (PWA install is the path).
+  const fsBtn = hudFullscreenButton();
+  if (!document.fullscreenEnabled) fsBtn.classList.add('hidden');
+  fsBtn.addEventListener('click', () => {
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitRequestFullscreen?: () => Promise<void> };
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+    const active = document.fullscreenElement ?? doc.webkitFullscreenElement;
+    if (active) {
+      void document.exitFullscreen();
+    } else {
+      const req = el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.();
+      void req?.then(() => {
+        // installed-PWA/Android: lock to landscape so the rotation gate rarely shows
+        const so = screen.orientation as (ScreenOrientation & { lock?: (o: string) => Promise<void> }) | undefined;
+        try { void so?.lock?.('landscape'); } catch { /* unsupported */ }
+      }).catch(() => { /* denied */ });
+    }
+  });
   window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
   resize();
   window.addEventListener('resize', resize);
+  // entering/exiting fullscreen resizes the viewport — reflow camera + post
+  window.addEventListener('fullscreenchange', () => setTimeout(resize, 60));
   // ?nopause=1 keeps the sim running when the tab is hidden (automated QA)
   if (!new URLSearchParams(location.search).has('nopause')) {
     document.addEventListener('visibilitychange', () => {
@@ -181,6 +206,11 @@ async function boot(): Promise<void> {
   debugEl = document.createElement('div');
   debugEl.style.cssText = 'position:fixed;bottom:4px;left:4px;font:11px monospace;color:#8f8;background:#000a;padding:2px 8px;z-index:99;display:none;pointer-events:none;white-space:pre';
   document.body.appendChild(debugEl);
+
+  // PWA: installable + offline-capable (https or localhost only)
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    void navigator.serviceWorker.register('./sw.js').catch(() => { /* dev/offline env */ });
+  }
   window.addEventListener('keydown', (e) => {
     if (e.key === 'F3') {
       e.preventDefault();
@@ -332,6 +362,7 @@ function descendRun(): void {
   phase = 'running';
   const b = run.w.zoneAt(run.w.px, run.w.py).biome;
   post?.setBiome(b);
+  audio.descend();
   audio.startMusic(b.id);
   toast(`⚔ DESCEND ${run.w.descendLevel} — THE PIT HUNGERS. EVERY 90s, ANOTHER BONZAR.`, 3600);
 }
