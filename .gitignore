@@ -1,0 +1,16 @@
+# WRECKBALL repo = the game at this workspace root. Sibling folders are
+# separate projects that live in the same workspace — never commit them.
+desync/
+motherroot/
+sis-website/
+tmp-skilltest/
+rite-shots/
+.zcode/
+
+# build + deps
+node_modules/
+dist/
+
+# local junk
+*.log
+.DS_Store
