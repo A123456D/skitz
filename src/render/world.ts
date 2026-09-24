@@ -109,6 +109,7 @@ export class WorldRenderer implements FxSink {
     patches: Graphics;
     walls: Container;
     wallSegs: Graphics;
+    wallDeco: Container;
     shadows: Container;
     trail: Container;
     ghosts: Container;
@@ -125,6 +126,7 @@ export class WorldRenderer implements FxSink {
     zaps: Graphics;
     meteors: Graphics;
     meteorPool: Container;
+    tg: Container;
     numbers: Container;
   };
 
@@ -134,6 +136,7 @@ export class WorldRenderer implements FxSink {
   private enemySprites: Sprite[] = [];
   private enemyShadows: Sprite[] = [];
   private enemyAuras: Array<Sprite | undefined> = [];
+  private enemyCrowns: Array<Sprite | undefined> = []; // elite rank spikes
   private enemyEgz: number[] = []; // eased ground height per slot (visual)
   private obstacleSprites: Sprite[] = [];
   private gemSprites: Sprite[] = [];
@@ -148,6 +151,8 @@ export class WorldRenderer implements FxSink {
   private ghostSprites: Flash[] = [];
   private zaps: Array<{ x1: number; y1: number; x2: number; y2: number; t: number }> = [];
   private meteorSprites: Sprite[] = [];
+  private tgArrows: Sprite[] = [];
+  private bossColumn: Sprite | null = null;
 
   private particles!: ParticleSys;
   private shards!: ParticleSys;
@@ -217,7 +222,29 @@ export class WorldRenderer implements FxSink {
         else if (side === 1) { bx = MAPCX - spanX / 2 + rng.next() * spanX; by = MAPCY + spanY / 2 + bh * 0.2 + rng.next() * 700; }
         else if (side === 2) { bx = MAPCX - spanX / 2 - rng.next() * 700; by = MAPCY - spanY / 2 + rng.next() * spanY; }
         else { bx = MAPCX + spanX / 2 + rng.next() * 700; by = MAPCY - spanY / 2 + rng.next() * spanY; }
+        // varied massing: flat / slanted / stepped roofs instead of plain boxes
+        const roof = rng.int(0, 2);
         shapes.rect(bx, by - bh, bw, bh).fill(0xffffff);
+        if (roof === 1) {
+          // slanted roof
+          shapes.moveTo(bx, by - bh).lineTo(bx + bw * 0.5, by - bh - bw * 0.22).lineTo(bx + bw, by - bh).fill(0xffffff);
+        } else if (roof === 2) {
+          // stepped top
+          shapes.rect(bx + bw * 0.25, by - bh - bh * 0.18, bw * 0.5, bh * 0.2).fill(0xffffff);
+        }
+        // attachments: antenna / chimney / rooftop tank
+        const att = rng.next();
+        if (att < 0.3) {
+          shapes.rect(bx + bw * 0.7, by - bh - bh * 0.3, 3, bh * 0.3).fill(0xffffff);
+          shapes.circle(bx + bw * 0.7 + 1.5, by - bh - bh * 0.3, 2.5).fill(0xffffff);
+        } else if (att < 0.55) {
+          shapes.rect(bx + bw * 0.15, by - bh - 14, 7, 14).fill(0xffffff);
+        } else if (att < 0.75) {
+          // rooftop water tank on legs
+          shapes.circle(bx + bw * 0.4, by - bh - 12, 8).fill(0xffffff);
+          shapes.rect(bx + bw * 0.4 - 6, by - bh - 6, 3, 6).fill(0xffffff);
+          shapes.rect(bx + bw * 0.4 + 3, by - bh - 6, 3, 6).fill(0xffffff);
+        }
         if (opts.windows) {
           const cols = Math.max(1, Math.floor(bw / 26));
           const rows = Math.max(1, Math.floor(bh / 34));
@@ -227,6 +254,38 @@ export class WorldRenderer implements FxSink {
               wins.rect(bx + 8 + cx * 26, by - bh + 12 + cy * 34, 5, 7).fill(0xffffff);
             }
           }
+        }
+      }
+      // GIANT distant machinery: turbine, silo pair, gantry crane — the world extends beyond the arena
+      const giant = rng;
+      for (let g = 0; g < 3; g++) {
+        const side = giant.int(0, 3);
+        const gx = side === 0 || side === 1 ? MAPCX - spanX / 2 + giant.next() * spanX : side === 2 ? MAPCX - spanX / 2 - 320 : MAPCX + spanX / 2 + 320;
+        const gy = side === 0 ? MAPCY - spanY / 2 - 360 : side === 1 ? MAPCY + spanY / 2 + 360 : MAPCY - spanY / 2 + giant.next() * spanY;
+        if (g === 0) {
+          // cooling turbine: huge ring on a pedestal
+          shapes.circle(gx, gy, 150).fill(0xffffff);
+          shapes.circle(gx, gy, 105).fill(0x000000);
+          shapes.circle(gx, gy, 96).fill(0xffffff);
+          shapes.rect(gx - 130, gy + 120, 260, 60).fill(0xffffff);
+          shapes.rect(gx - 60, gy + 150, 120, 90).fill(0xffffff);
+        } else if (g === 1) {
+          // silo pair with connector
+          shapes.circle(gx, gy, 90).fill(0xffffff);
+          shapes.circle(gx + 150, gy + 40, 70).fill(0xffffff);
+          shapes.rect(gx - 90, gy, 330, 200).fill(0xffffff);
+          shapes.circle(gx, gy, 60).fill(0x000000);
+          shapes.circle(gx + 150, gy + 40, 46).fill(0x000000);
+          shapes.circle(gx, gy, 52).fill(0xffffff);
+          shapes.circle(gx + 150, gy + 40, 38).fill(0xffffff);
+        } else {
+          // crane: mast + jib + hanging hook
+          shapes.rect(gx - 20, gy - 60, 40, 520).fill(0xffffff);
+          shapes.rect(gx - 340, gy - 40, 680, 34).fill(0xffffff);
+          shapes.rect(gx - 340, gy - 6, 10, 60).fill(0xffffff);
+          shapes.rect(gx + 260, gy - 6, 10, 60).fill(0xffffff);
+          shapes.rect(gx + 120, gy - 6, 4, 190).fill(0xffffff);
+          shapes.rect(gx + 100, gy + 180, 44, 30).fill(0xffffff);
         }
       }
       return { shapes, windows: wins };
@@ -250,7 +309,7 @@ export class WorldRenderer implements FxSink {
     // additive glow decals (light pools) — positioned per run in initRun
     const glowPool = new Container();
     this.glowSprites = [];
-    for (let i = 0; i < 56; i++) {
+    for (let i = 0; i < 96; i++) {
       const s = new Sprite(glowTexture());
       s.anchor.set(0.5);
       s.blendMode = 'add';
@@ -276,6 +335,11 @@ export class WorldRenderer implements FxSink {
     // interior wall segments get their own Graphics (drawn per run in initRun)
     const wallSegs = new Graphics();
     walls.addChild(wallSegs);
+    // wall variety overlays (damaged / pipes / lamps) drawn per run
+    const wallDeco = new Container();
+    walls.addChild(wallDeco);
+    // ground telegraph arrows (charge/lunge direction indicators)
+    const tg = new Container();
 
     const terraces = new Graphics();
     const patches = new Graphics();
@@ -368,11 +432,11 @@ export class WorldRenderer implements FxSink {
     }
     const numbers = damageNumberLayer();
 
-    this.root.addChild(sky, farRigs.shapes, farRigs.windows, midRigs.shapes, midRigs.windows, nearRigs.shapes, nearRigs.windows, fog, glowPool, zoneFloors, scenery, patches, terraces, walls, wallSegs, shadows, trail, ghosts, orbitPath, gems, rewards, actors, rings, spikes, bolts, vbullets, this.particles.container, this.shards.container, flashes, zaps, numbers);
+    this.root.addChild(sky, farRigs.shapes, farRigs.windows, midRigs.shapes, midRigs.windows, nearRigs.shapes, nearRigs.windows, fog, glowPool, zoneFloors, scenery, patches, terraces, walls, wallSegs, shadows, trail, ghosts, orbitPath, gems, rewards, tg, actors, rings, spikes, bolts, vbullets, this.particles.container, this.shards.container, flashes, zaps, numbers);
     this.root.addChildAt(meteors, this.root.getChildIndex(shadows));
     this.root.addChild(meteorPool);
 
-    this.layers = { sky, bgFar: farRigs.shapes, bgMid: midRigs.shapes, bgNear: nearRigs.shapes, fog, zoneFloors, scenery, patches, terraces, walls, wallSegs, shadows, trail, ghosts, orbitPath, gems, rewards, actors, rings, flashes, particles: this.particles.container, zaps, numbers, bolts, vbullets, spikes, meteors, meteorPool };
+    this.layers = { sky, bgFar: farRigs.shapes, bgMid: midRigs.shapes, bgNear: nearRigs.shapes, fog, zoneFloors, scenery, patches, terraces, walls, wallSegs, wallDeco, shadows, trail, ghosts, orbitPath, gems, rewards, actors, rings, flashes, particles: this.particles.container, zaps, numbers, bolts, vbullets, spikes, meteors, meteorPool, tg };
     this.bgWindows = [farRigs.windows, midRigs.windows, nearRigs.windows];
   }
 
@@ -461,19 +525,155 @@ export class WorldRenderer implements FxSink {
       pg.circle(b.x, b.y * GROUND_TILT, b.r).stroke({ width: 3, color: 0xff7a9a, alpha: 0.85 });
     }
 
-    // seeded scenery scatter per zone (side rng keeps the sim sequence untouched)
+    // ---- authored environment pass (side rng keeps the sim sequence untouched) ----
+    // 1) SET PIECES: large landmarks per zone at designed anchors — the world feels built, not scattered
+    // 2) FLOOR IDENTITY: walkway lanes, conduit runs, hazard pads, panel fields via constrained chunk rules
+    // 3) SCATTER: reduced, clustered around landmarks, min-distance checks — no uniform confetti
     const rng = new Rng((w.seed ^ 0x9e3779b9) >>> 0);
     this.layers.scenery.removeChildren();
     const glowSpots: Array<{ x: number; ry: number; tint: number; scale: number; alpha: number }> = [];
+
+    const BIOME_SET_PIECES: Record<string, string[]> = {
+      iron: ['sp_door', 'sp_gantry', 'sp_reactor', 'sp_hub'],
+      frost: ['sp_tank', 'sp_pipes', 'sp_reactor', 'sp_hub'],
+      rust: ['sp_pipes', 'sp_door', 'sp_generator', 'sp_hub'],
+      ember: ['sp_generator', 'sp_reactor', 'sp_pipes', 'sp_hub'],
+    };
+    // glowing-core props get an accent light pool
+    const GLOWING_PROPS = new Set(['sp_reactor', 'sp_generator', 'sp_hub']);
+    // designed anchors (fractions of the zone rect), seeded jitter keeps runs fresh
+    const ANCHORS: Array<[number, number]> = [[0.24, 0.3], [0.76, 0.22], [0.28, 0.76], [0.74, 0.74]];
+    const setPieceSpots: Array<{ x: number; y: number }> = [];
     for (const zone of w.zones) {
-      const count = Math.floor(34 * zone.biome.deco);
-      const decos = ['crack', 'crack', 'plate', 'grate', 'rubble', 'glowcrack'] as const;
-      for (let i = 0; i < count; i++) {
-        const name = decos[Math.floor(rng.next() * decos.length)];
+      const props = BIOME_SET_PIECES[zone.biome.id] ?? BIOME_SET_PIECES.iron;
+      for (let i = 0; i < props.length; i++) {
+        const [fx, fy] = ANCHORS[i % ANCHORS.length];
+        const jx = fx * zone.w + (rng.next() - 0.5) * 120;
+        const jy = fy * zone.h + (rng.next() - 0.5) * 120;
+        const x = zone.x + Math.max(90, Math.min(zone.w - 90, jx));
+        const y = zone.y + Math.max(90, Math.min(zone.h - 90, jy));
+        if (w.groundHeightAt(x, y) > 0 || w.patchAt(x, y)) continue; // keep clear of terraces/ice/goo
+        const s = new Sprite(this.atlas[props[i]]);
+        s.anchor.set(0.5, 1);
+        s.position.set(Math.round(x), Math.round(y * GROUND_TILT));
+        s.tint = 0xdde3f0; // light steel so baked detail reads in every biome
+        s.scale.set(1.9);
+        this.layers.scenery.addChild(s);
+        setPieceSpots.push({ x, y });
+        if (GLOWING_PROPS.has(props[i])) {
+          glowSpots.push({ x, ry: (y - 16) * GROUND_TILT, tint: zone.biome.accent, scale: 190, alpha: 0.3 });
+        } else {
+          glowSpots.push({ x, ry: y * GROUND_TILT, tint: zone.biome.accent, scale: 140, alpha: 0.12 });
+        }
+      }
+    }
+
+    // ---- floor identity: 32px chunk rules per zone ----
+    for (const zone of w.zones) {
+      const floorTint = zone.biome.floorTint;
+      const put = (name: string, x: number, y: number, rot = 0): void => {
         const s = new Sprite(this.atlas[name]);
         s.anchor.set(0.5);
-        const x = zone.x + 60 + rng.next() * (zone.w - 120);
-        const y = zone.y + 60 + rng.next() * (zone.h - 120);
+        s.position.set(Math.round(x), Math.round(y * GROUND_TILT));
+        s.tint = floorTint;
+        s.alpha = 0.95;
+        s.rotation = rot;
+        this.layers.scenery.addChild(s);
+      };
+      // walkway arteries: two horizontal + two vertical lanes per zone, with
+      // designed breaks and occasional inset hazard plates so they never read as stripes
+      const lanesH = [zone.y + zone.h * 0.33, zone.y + zone.h * 0.67];
+      const lanesV = [zone.x + zone.w * 0.33, zone.x + zone.w * 0.67];
+      for (const ly of lanesH) {
+        let n = 0;
+        for (let x = zone.x + 48; x < zone.x + zone.w - 48; x += 32) {
+          n++;
+          if (n % 9 === 0) { continue; } // broken section
+          if (n % 6 === 0) { put('f_hazard', x, ly); continue; }
+          if (rng.next() < 0.12) { put('f_conduit', x + 8, ly); x += 48; continue; } // conduit boxes in the lane
+          put('f_walkway', x, ly);
+        }
+      }
+      for (const lx of lanesV) {
+        let n = 0;
+        for (let y = zone.y + 48; y < zone.y + zone.h - 48; y += 32) {
+          n++;
+          if (n % 9 === 0) { continue; }
+          if (n % 7 === 0) { put('f_hazard', lx, y, Math.PI / 2); continue; }
+          if (rng.next() < 0.1) { put('f_conduit', lx, y + 8, Math.PI / 2); y += 48; continue; }
+          put('f_walkway', lx, y, Math.PI / 2);
+        }
+      }
+      // hazard pads at the zone's four corners + dead center (warning paint near gates)
+      for (const [fx, fy] of [[0.08, 0.08], [0.92, 0.08], [0.08, 0.92], [0.92, 0.92], [0.5, 0.5]] as const) {
+        put('f_hazard', zone.x + fx * zone.w, zone.y + fy * zone.h);
+      }
+      // vents along lanes + panels scattered sparsely (avoid lanes)
+      for (let v = 0; v < 7; v++) {
+        const lx = lanesV[v % 2] + (rng.next() - 0.5) * 260;
+        const ly = zone.y + 140 + rng.next() * (zone.h - 280);
+        put('f_vent', lx, ly);
+      }
+      for (let p2 = 0; p2 < 26; p2++) {
+        const px2 = zone.x + 70 + rng.next() * (zone.w - 140);
+        const py2 = zone.y + 70 + rng.next() * (zone.h - 140);
+        const onLane = lanesH.some((l) => Math.abs(py2 - l) < 60) || lanesV.some((l) => Math.abs(px2 - l) < 60);
+        if (onLane) continue;
+        put('f_panel', px2, py2, Math.floor(rng.next() * 4) * (Math.PI / 2));
+      }
+    }
+
+    // ---- wall variety: lamp strips, pipe runs, blast damage along the far wall ----
+    const wd = this.layers.wallDeco;
+    wd.removeChildren();
+    const wallY = 22;
+    let lastDmg = -99;
+    for (let x = 24; x < ARENA_W - 24; x += 48) {
+      const roll = rng.next();
+      let name: string | null = null;
+      if (roll < 0.2) name = 'wall_light';
+      else if (roll < 0.34 && x - lastDmg > 240) { name = 'wall_dmg'; lastDmg = x; }
+      else if (roll < 0.5) name = 'wall_pipe';
+      if (!name) continue;
+      const s = new Sprite(this.atlas[name]);
+      s.anchor.set(0.5, 1);
+      s.position.set(x, wallY);
+      s.tint = 0xd8dce8;
+      wd.addChild(s);
+      if (name === 'wall_light') glowSpots.push({ x, ry: wallY + 6, tint: 0xffe9b0, scale: 74, alpha: 0.14 });
+    }
+
+    // ---- scenery scatter: fewer, clustered near landmarks, spaced apart ----
+    const BIOME_DECOS: Record<string, string[]> = {
+      iron: ['plate', 'plate', 'crack', 'grate', 'glowcrack'],
+      frost: ['crack', 'plate', 'glowcrack', 'grate', 'crack'],
+      rust: ['crack', 'crack', 'rubble', 'glowcrack', 'rubble'],
+      ember: ['glowcrack', 'crack', 'rubble', 'glowcrack', 'plate'],
+    };
+    const placed: Array<{ x: number; y: number }> = [];
+    for (const zone of w.zones) {
+      const decos = BIOME_DECOS[zone.biome.id] ?? BIOME_DECOS.iron;
+      const count = Math.floor(20 * zone.biome.deco);
+      for (let i = 0; i < count; i++) {
+        const name = decos[Math.floor(rng.next() * decos.length)];
+        // 65% cluster near a set piece (authored feel), 35% loose
+        let x: number;
+        let y: number;
+        if (rng.next() < 0.65 && setPieceSpots.length > 0) {
+          const spot = setPieceSpots[Math.floor(rng.next() * setPieceSpots.length)];
+          const a = rng.next() * Math.PI * 2;
+          const d = 90 + rng.next() * 190;
+          x = spot.x + Math.cos(a) * d;
+          y = spot.y + Math.sin(a) * d * 0.8;
+        } else {
+          x = zone.x + 60 + rng.next() * (zone.w - 120);
+          y = zone.y + 60 + rng.next() * (zone.h - 120);
+        }
+        if (x < zone.x + 40 || x > zone.x + zone.w - 40 || y < zone.y + 40 || y > zone.y + zone.h - 40) continue;
+        if (placed.some((q) => Math.abs(q.x - x) < 44 && Math.abs(q.y - y) < 44)) continue; // no clumps of the same decal
+        placed.push({ x, y });
+        const s = new Sprite(this.atlas[name]);
+        s.anchor.set(0.5);
         s.position.set(Math.round(x), Math.round(y * GROUND_TILT));
         s.rotation = Math.floor(rng.next() * 4) * (Math.PI / 2);
         if (name === 'glowcrack') {
@@ -484,15 +684,9 @@ export class WorldRenderer implements FxSink {
         } else {
           s.tint = zone.biome.decoTint;
           s.alpha = 0.5 + rng.next() * 0.4;
-          s.scale.set(0.8 + rng.next() * 1.8);
+          s.scale.set(0.8 + rng.next() * 1.4);
         }
         this.layers.scenery.addChild(s);
-      }
-      // two standing lamps per zone: light pool + bloom bait
-      for (let l = 0; l < 2; l++) {
-        const lx = zone.x + 180 + rng.next() * (zone.w - 360);
-        const ly = zone.y + 180 + rng.next() * (zone.h - 360);
-        glowSpots.push({ x: lx, ry: ly * GROUND_TILT, tint: zone.biome.accent, scale: 95 + rng.next() * 55, alpha: 0.12 });
       }
     }
     // glow pools under bumpers, jump pads, shrines
@@ -607,12 +801,22 @@ export class WorldRenderer implements FxSink {
       gp.s.rotation = Math.sin((1 - t) * 6 + gp.sway) * 0.08;
     }
 
-    // --- obstacles (y-sorted, base-anchored) ---
+    // --- obstacles (y-sorted, base-anchored, damage states) ---
     for (let i = 0; i < w.oCount; i++) {
       const s = this.obstacleSprites[i];
       const alive = !(w.otype[i] === OBST_CRATE && w.ohp[i] <= 0);
       s.visible = alive && inView(w.ox[i], w.oy[i], 60);
       if (!s.visible || !alive) continue;
+      // damage states: NEW → DAMAGED → SEVERELY DAMAGED via sprite variants
+      let texName: string;
+      if (w.otype[i] === OBST_PILLAR) texName = 'pillar';
+      else if (w.otype[i] === OBST_CHEST) texName = 'chest';
+      else {
+        const ratio = w.ohp[i] / w.omaxhp[i];
+        texName = ratio > 0.66 ? 'crate' : ratio > 0.33 ? 'crate_dmg' : 'crate_dmg2';
+      }
+      const wantTex = this.atlas[texName];
+      if (s.texture !== wantTex) s.texture = wantTex;
       const baseScale = (w.oradius[i] * 2) / s.texture.width;
       s.scale.set(baseScale);
       s.position.set(Math.round(w.ox[i]), Math.round(py(w.oy[i]) + 4));
@@ -620,15 +824,13 @@ export class WorldRenderer implements FxSink {
       if (w.oflash[i] > 0) {
         w.oflash[i] -= dt;
         s.tint = 0xfff2c8;
-      } else if (w.otype[i] === OBST_CRATE) {
-        const ratio = Math.max(0, w.ohp[i]) / w.omaxhp[i];
-        s.tint = ratio > 0.66 ? WHITE : ratio > 0.33 ? 0xd8c2a8 : 0xb09478;
       } else {
-        s.tint = WHITE;
+        s.tint = w.otype[i] === OBST_PILLAR ? 0xd8dce8 : w.otype[i] === OBST_CHEST ? 0xffe9a8 : WHITE;
       }
     }
 
     // --- enemies (idle/attack animation + z lift + y-sort) ---
+    let tgUsed = 0;
     for (let i = 0; i < w.eCount; i++) {
       let s = this.enemySprites[i];
       if (!s) {
@@ -681,6 +883,15 @@ export class WorldRenderer implements FxSink {
       let stretchRot: number | null = null;
       const ph = i * 1.73;
 
+      // elite rank: spike crown above the silhouette (readable before the aura registers)
+      if (w.eelite[i]) {
+        const crown = this.enemyCrowns[i] ?? this.makeCrown(i);
+        crown.visible = true;
+        crown.position.set(s.x, s.y - (s.texture.height * baseScale) / 2 - 7 - Math.sin(w.time * 4 + i) * 1.5);
+        crown.scale.set((w.eradius[i] * 2) / 14);
+        crown.tint = modDef ? modDef.tint : 0xffd23f;
+      }
+
       switch (type) {
         case ENEMY.swarmie: {
           const hop = Math.abs(Math.sin(w.time * 7 + ph));
@@ -713,6 +924,18 @@ export class WorldRenderer implements FxSink {
           s.rotation = 0;
       }
 
+      // boss presence: a tall light column marks the arena's apex threat
+      if (ENEMY_DEFS[type].boss) {
+        const col = this.bossColumn ?? this.makeBossColumn();
+        col.visible = true;
+        col.position.set(s.x, sh.y + 2);
+        col.tint = type === ENEMY.krusher ? 0xffb14b : 0xff5a5a;
+        col.alpha = 0.3 + Math.sin(w.time * 2.2) * 0.08;
+        col.scale.set((w.eradius[i] * 3.4) / 128, 2.8);
+      } else if (this.bossColumn?.visible) {
+        this.bossColumn.visible = false;
+      }
+
       // attack windup telegraph
       const atk = ENEMY_DEFS[type].attack;
       if (atk && w.ewindup[i] > 0) {
@@ -723,6 +946,19 @@ export class WorldRenderer implements FxSink {
         s.tint = Math.sin(w.time * 24) > 0 ? 0xffb14b : 0xff5a4d;
         s.scale.set(baseScale * sx, baseScale * sy);
         s.zIndex = w.ey[i];
+        // directional indicator: a ground arrow grows toward where the hit will land
+        if (atk.kind === 'charge' || atk.kind === 'lunge') {
+          const arrow = this.tgArrows[tgUsed] ?? this.makeArrow();
+          const dx = w.edirX[i];
+          const dy = w.edirY[i];
+          arrow.visible = true;
+          arrow.position.set(s.x + dx * (w.eradius[i] + 24), s.y + dy * (w.eradius[i] + 24) * GROUND_TILT);
+          arrow.rotation = Math.atan2(dy * GROUND_TILT, dx);
+          arrow.tint = atk.kind === 'charge' ? 0xff3b3b : 0xffb14b;
+          arrow.alpha = 0.45 + r * 0.5;
+          arrow.scale.set(0.8 + r * 1.1);
+          tgUsed++;
+        }
         continue;
       }
 
@@ -765,6 +1001,10 @@ export class WorldRenderer implements FxSink {
       if (this.enemySprites[i].visible) this.enemySprites[i].visible = false;
       if (this.enemyShadows[i]?.visible) this.enemyShadows[i].visible = false;
       if (this.enemyAuras[i]?.visible) this.enemyAuras[i]!.visible = false;
+      if (this.enemyCrowns[i]?.visible) this.enemyCrowns[i]!.visible = false;
+    }
+    for (let i = tgUsed; i < this.tgArrows.length; i++) {
+      if (this.tgArrows[i].visible) this.tgArrows[i].visible = false;
     }
 
     // --- gems/coins ---
@@ -1099,6 +1339,40 @@ export class WorldRenderer implements FxSink {
       this.enemyAuras[i] = a;
     }
     return a;
+  }
+
+  /** elite rank spikes (drawn above the enemy sprite) */
+  private makeCrown(i: number): Sprite {
+    let c = this.enemyCrowns[i];
+    if (!c) {
+      c = new Sprite(this.atlas.elite_crown);
+      c.anchor.set(0.5, 1);
+      this.layers.actors.addChild(c);
+      c.zIndex = 99999; // crowns always over sprites; actors sort by zIndex (feet y)
+      this.enemyCrowns[i] = c;
+    }
+    return c;
+  }
+
+  /** additive light column under the active boss */
+  private makeBossColumn(): Sprite {
+    const col = new Sprite(glowTexture());
+    col.anchor.set(0.5, 1);
+    col.blendMode = 'add';
+    col.visible = false;
+    this.layers.shadows.addChild(col);
+    this.bossColumn = col;
+    return col;
+  }
+
+  /** pooled ground arrow for directional attack telegraphs */
+  private makeArrow(): Sprite {
+    const s = new Sprite(this.atlas.tg_arrow);
+    s.anchor.set(0.5);
+    s.visible = false;
+    this.layers.tg.addChild(s);
+    this.tgArrows.push(s);
+    return s;
   }
 
   // ================= FxSink =================

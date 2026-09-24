@@ -768,6 +768,428 @@ def('ghost', 12, 12, (p) => {
   p.set(5, 8, eye); p.set(6, 8, eye);
 });
 
+// ---------- obstacles (were MISSING from the atlas — obstacles rendered invisible) ----------
+
+const WOOD: RGB = [196, 156, 96], WOOD_D: RGB = [120, 88, 48], WOOD_L: RGB = [230, 196, 140];
+const WOOD_EDGE: RGB = [74, 52, 28];
+
+/** ammo crate: plank face, corner brackets, stencil mark */
+def('crate', 20, 20, (p) => {
+  for (let y = 0; y < 20; y++) for (let x = 0; x < 20; x++) {
+    const edge = x === 0 || y === 0 || x === 19 || y === 19;
+    p.set(x, y, edge ? WOOD_EDGE : (x + y) % 7 === 0 ? WOOD_D : WOOD);
+  }
+  // top-lit plank bevel
+  for (let x = 1; x < 19; x++) p.set(x, 1, WOOD_L);
+  for (let y = 1; y < 19; y++) p.set(1, y, y < 4 ? WOOD_L : WOOD);
+  // horizontal plank seams
+  for (const yy of [6, 13]) for (let x = 1; x < 19; x++) p.set(x, yy, WOOD_D);
+  // corner brackets
+  const br: RGB = [110, 118, 150], brD: RGB = [56, 62, 96];
+  for (const [bx, by] of [[2, 2], [15, 2], [2, 15], [15, 15]] as const) {
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) p.set(bx + x, by + y, (x === 0 || y === 0) ? br : brD);
+  }
+  // stencil chevron
+  const st: RGB = [90, 62, 30];
+  p.set(8, 9, st); p.set(9, 10, st); p.set(10, 9, st); p.set(11, 10, st);
+  p.set(8, 12, st); p.set(10, 12, st); p.set(12, 12, st);
+});
+
+/** cracked crate overlay: swap in when damaged (stage 1) */
+def('crate_dmg', 20, 20, (p) => {
+  const c: RGB = [52, 38, 22];
+  for (let x = 3; x <= 9; x++) p.set(x, 4 + (x % 3), c);
+  p.set(9, 7, c); p.set(10, 8, c); p.set(11, 9, c); p.set(12, 10, c);
+  for (let y = 11; y <= 17; y++) p.set(14 - (y % 3), y, c);
+  p.set(5, 13, c); p.set(6, 14, c); p.set(4, 15, c);
+  // splinters missing at a corner
+  for (const [x, y] of [[17, 2], [18, 2], [18, 3], [16, 1]] as const) p.set(x, y, [0, 0, 0], 0);
+  p.set(15, 2, WOOD_D); p.set(17, 4, WOOD_D);
+});
+
+/** heavy-crack overlay: near-breaking (stage 2) */
+def('crate_dmg2', 20, 20, (p) => {
+  const c: RGB = [44, 32, 18];
+  for (let x = 2; x <= 17; x++) p.set(x, 9 + (x % 2), c);
+  for (let y = 2; y <= 17; y++) p.set(9 + (y % 2), y, c);
+  for (const [x, y] of [[16, 2], [17, 2], [18, 2], [17, 3], [18, 3], [3, 16], [2, 17], [3, 17], [2, 16]] as const) p.set(x, y, [0, 0, 0], 0);
+  p.set(6, 4, c); p.set(7, 5, c); p.set(13, 14, c); p.set(14, 15, c);
+});
+
+/** indestructible pillar: riveted steel column, base-anchored footprint */
+def('pillar', 20, 30, (p) => {
+  const steel: RGB = [128, 138, 172], steelD: RGB = [64, 70, 108], steelL: RGB = [196, 206, 236];
+  // column shaft with vertical shading
+  for (let y = 0; y < 26; y++) for (let x = 3; x < 17; x++) {
+    p.set(x, y, x <= 5 ? steelL : x <= 9 ? steel : x <= 13 ? steelD : [48, 54, 84]);
+  }
+  // horizontal flange rings
+  for (const yy of [5, 14, 22]) {
+    for (let x = 2; x < 18; x++) { p.set(x, yy, steelL); p.set(x, yy + 1, steelD); }
+  }
+  // rivets on rings
+  const riv: RGB = [30, 34, 58];
+  for (const yy of [5, 14, 22]) for (const xx of [4, 9, 14]) p.set(xx, yy, riv);
+  // footing base
+  for (let y = 26; y < 30; y++) for (let x = 0; x < 20; x++) {
+    p.set(x, y, y === 26 ? steelL : y === 29 ? [30, 34, 54] : steel);
+  }
+  for (const xx of [2, 9, 16]) { p.set(xx, 27, riv); p.set(xx, 28, riv); }
+});
+
+/** loot chest: steel-banded wooden strongbox, gold latch */
+def('chest', 24, 20, (p) => {
+  for (let y = 0; y < 20; y++) for (let x = 0; x < 24; x++) {
+    const edge = x === 0 || y === 0 || x === 23 || y === 19;
+    p.set(x, y, edge ? WOOD_EDGE : (x * 3 + y) % 11 === 0 ? WOOD_D : WOOD);
+  }
+  for (let x = 1; x < 23; x++) p.set(x, 1, WOOD_L);
+  // steel bands
+  const band: RGB = [128, 138, 172], bandD: RGB = [64, 70, 108];
+  for (const xx of [4, 12, 19]) {
+    for (let y = 0; y < 20; y++) { p.set(xx, y, band); p.set(xx + 1, y, y % 3 === 0 ? band : bandD); }
+  }
+  // lid seam
+  for (let x = 1; x < 23; x++) p.set(x, 7, WOOD_D);
+  // gold latch
+  const gold: RGB = [255, 210, 63], goldD: RGB = [170, 120, 20];
+  p.rect(10, 6, 4, 5, gold);
+  p.rect(11, 8, 2, 2, goldD);
+  p.set(10, 6, [255, 240, 160]);
+});
+
+// ---------- set pieces (authored landmarks; neutral gray — zones tint them) ----------
+
+const GR: RGB = [118, 126, 158], GR_D: RGB = [56, 62, 96], GR_L: RGB = [188, 198, 228];
+const GR_E: RGB = [32, 36, 58];
+const HAZ: RGB = [232, 168, 40], HAZ_D: RGB = [150, 100, 18];
+
+/** reactor column: coils, glowing core slot, pipes, hazard skirt (56x56) */
+def('sp_reactor', 56, 56, (p) => {
+  // base slab
+  for (let y = 48; y < 56; y++) for (let x = 4; x < 52; x++) p.set(x, y, y === 48 ? GR_L : y >= 54 ? GR_E : GR_D);
+  for (const xx of [8, 20, 32, 44]) { p.set(xx, 50, GR_E); p.set(xx, 51, GR_E); }
+  // main column
+  for (let y = 8; y < 48; y++) for (let x = 14; x < 42; x++) {
+    p.set(x, y, x < 18 ? GR_L : x < 30 ? GR : x < 38 ? GR_D : GR_E);
+  }
+  // coil rings
+  for (const yy of [12, 20, 28, 36]) {
+    for (let x = 13; x < 43; x++) { p.set(x, yy, GR_L); p.set(x, yy + 1, GR_D); }
+    for (const xx of [16, 28, 39]) p.set(xx, yy, GR_E);
+  }
+  // core slot (glow painted white; zone tints + runtime glow do the color)
+  for (let y = 22; y < 34; y++) for (let x = 24; x < 32; x++) {
+    p.set(x, y, y === 22 || x === 24 ? [255, 255, 255] : y >= 32 ? [210, 210, 210] : [255, 255, 255]);
+  }
+  // top cap + antenna
+  for (let x = 18; x < 38; x++) { p.set(x, 8, GR_L); p.set(x, 9, GR_D); }
+  for (let y = 2; y < 8; y++) { p.set(27, y, GR); p.set(28, y, GR_D); }
+  p.set(27, 1, [255, 255, 255]); p.set(28, 1, [255, 255, 255]);
+  // side pipes
+  for (let y = 14; y < 44; y++) { p.set(8, y, GR_D); p.set(9, y, GR); p.set(10, y, GR_L); }
+  for (const yy of [16, 30, 42]) { p.set(7, yy, GR_E); p.set(11, yy, GR_E); }
+  // hazard skirt
+  for (let x = 4; x < 52; x++) { p.set(x, 47, (x % 6 < 3) ? HAZ : HAZ_D); }
+});
+
+/** half-open blast door: huge segmented slab, warning chevrons, gap (56x44) */
+def('sp_door', 56, 44, (p) => {
+  // frame
+  for (let y = 0; y < 44; y++) for (let x = 0; x < 56; x++) {
+    const frame = x < 5 || x >= 51;
+    if (frame) p.set(x, y, x < 2 || y % 8 === 0 ? GR_E : GR_D);
+  }
+  // left slab (lowered, covers half)
+  for (let y = 6; y < 44; y++) for (let x = 5; x < 30; x++) {
+    p.set(x, y, x < 8 ? GR_L : x < 22 ? GR : x < 26 ? GR_D : GR_E);
+  }
+  for (let x = 5; x < 30; x++) { p.set(x, 6, GR_L); p.set(x, 7, GR_D); p.set(x, 24, GR_D); }
+  // chevrons on slab
+  for (let x = 8; x < 28; x++) { p.set(x, 40, (x % 6 < 3) ? HAZ : HAZ_D); p.set(x, 41, (x % 6 < 3) ? HAZ_D : HAZ); }
+  // right slab (raised into frame)
+  for (let y = 0; y < 18; y++) for (let x = 30; x < 51; x++) {
+    p.set(x, y, x < 34 ? GR_L : x < 46 ? GR : GR_D);
+  }
+  for (let x = 30; x < 51; x++) p.set(x, 17, GR_E);
+  for (let x = 32; x < 50; x++) { p.set(x, 1, (x % 6 < 3) ? HAZ : HAZ_D); }
+  // floor gap between slabs: warning paint + debris nub
+  for (let x = 30; x < 51; x++) { p.set(x, 42, (x % 8 < 4) ? HAZ_D : GR_D); p.set(x, 43, GR_E); }
+  p.set(34, 39, GR); p.set(35, 40, GR_D); p.set(46, 38, GR_D);
+});
+
+/** coolant tank: riveted vertical tank, ladder, vent stack, frost seams (44x56) */
+def('sp_tank', 44, 56, (p) => {
+  for (let y = 6; y < 50; y++) for (let x = 6; x < 38; x++) {
+    p.set(x, y, x < 10 ? GR_L : x < 22 ? GR : x < 32 ? GR_D : GR_E);
+  }
+  // tank rings + rivets
+  for (const yy of [10, 20, 30, 40, 48]) {
+    for (let x = 5; x < 39; x++) { p.set(x, yy, GR_L); p.set(x, yy + 1, GR_D); }
+    for (const xx of [9, 18, 28, 35]) p.set(xx, yy, GR_E);
+  }
+  // domed top
+  for (let x = 8; x < 36; x++) { p.set(x, 5, GR_L); p.set(x, 6, GR); }
+  p.set(10, 4, GR_L); p.set(33, 4, GR);
+  // vent stack
+  for (let y = 0; y < 6; y++) { p.set(30, y, GR_D); p.set(31, y, GR); p.set(32, y, GR_L); }
+  p.set(29, 0, GR_E); p.set(33, 0, GR_E);
+  // ladder
+  for (let y = 12; y < 48; y += 3) { p.set(38, y, GR_L); p.set(39, y, GR_D); }
+  for (let y = 14; y < 48; y += 3) { p.set(38, y, GR_D); p.set(39, y, GR_D); }
+  // base + frost seams (white icicles)
+  for (let y = 50; y < 56; y++) for (let x = 4; x < 40; x++) p.set(x, y, y >= 54 ? GR_E : GR_D);
+  const ice: RGB = [235, 246, 255];
+  for (const [xx, len] of [[8, 3], [15, 5], [23, 2], [31, 4], [36, 2]] as const) {
+    for (let i = 0; i < len; i++) p.set(xx, 49 + i, ice);
+  }
+  for (let x = 6; x < 38; x += 6) p.set(x, 50, ice);
+});
+
+/** pipe cluster: broken junction, valves, drip stains (56x30) */
+def('sp_pipes', 56, 30, (p) => {
+  // two horizontal runs
+  for (let x = 2; x < 54; x++) {
+    for (const yy of [8, 20]) { p.set(x, yy, GR_L); p.set(x, yy + 1, GR); p.set(x, yy + 2, GR_D); }
+  }
+  // vertical junction column
+  for (let y = 6; y < 26; y++) for (let x = 24; x < 32; x++) {
+    p.set(x, y, x < 26 ? GR_L : x < 30 ? GR : GR_D);
+  }
+  for (let y = 6; y < 26; y++) { p.set(24, y, GR_L); p.set(31, y, GR_E); }
+  // valve wheels
+  for (const [vx, vy] of [[12, 6], [40, 17]] as const) {
+    p.sphere(vx, vy, 3.2, GR, GR_D, GR_L);
+    p.set(vx, vy, GR_E); p.set(vx - 1, vy, GR_E); p.set(vx + 1, vy, GR_E);
+  }
+  // broken joint: gap + spray
+  for (const [x, y] of [[17, 8], [18, 9], [18, 8], [19, 10], [19, 9]] as const) p.set(x, y, [0, 0, 0], 0);
+  p.set(16, 8, GR_E); p.set(17, 10, GR_D); p.set(18, 11, GR_D);
+  const drip: RGB = [70, 60, 40];
+  p.set(18, 14, drip); p.set(18, 18, drip); p.set(19, 22, drip); p.set(18, 25, drip);
+  // flanges
+  for (const xx of [8, 46]) for (const yy of [7, 19]) {
+    p.set(xx, yy, GR_E); p.set(xx + 1, yy, GR_E); p.set(xx, yy + 1, GR_E); p.set(xx + 1, yy + 1, GR_E);
+  }
+  // base shoes
+  for (const xx of [6, 26, 44]) for (let y = 26; y < 30; y++) for (let x = xx; x < xx + 8; x++) {
+    p.set(x, y, y === 26 ? GR_L : y >= 29 ? GR_E : GR_D);
+  }
+});
+
+/** energy generator: ring housing, spinning core marks, cables (48x48) */
+def('sp_generator', 48, 48, (p) => {
+  // base
+  for (let y = 40; y < 48; y++) for (let x = 4; x < 44; x++) p.set(x, y, y === 40 ? GR_L : y >= 46 ? GR_E : GR_D);
+  // outer ring housing
+  p.sphere(24, 24, 17, GR, GR_D, GR_L);
+  p.sphere(24, 24, 12, [46, 50, 78], [34, 38, 60], [60, 66, 100]);
+  // core ring: white so runtime glow + tint carry it
+  for (let a = 0; a < 360; a += 2) {
+    const rad = (a * Math.PI) / 180;
+    p.set(24 + Math.cos(rad) * 9.5, 24 + Math.sin(rad) * 9.5, [255, 255, 255]);
+  }
+  // rotor marks
+  for (const a of [0, 90, 180, 270]) {
+    const rad = (a * Math.PI) / 180;
+    p.set(24 + Math.cos(rad) * 6, 24 + Math.sin(rad) * 6, [255, 255, 255]);
+  }
+  // housing bolts
+  for (let a = 0; a < 360; a += 45) {
+    const rad = (a * Math.PI) / 180;
+    p.set(24 + Math.cos(rad) * 15, 24 + Math.sin(rad) * 15, GR_E);
+  }
+  // top vents
+  for (const xx of [18, 23, 28]) { p.set(xx, 5, GR_D); p.set(xx, 6, GR_D); }
+  for (let x = 16; x < 32; x++) p.set(x, 4, GR_L);
+  // cables snaking out
+  for (const [x, y] of [[6, 42], [7, 43], [8, 43], [9, 44], [10, 44], [40, 43], [41, 44], [42, 44], [43, 45]] as const) p.set(x, y, [40, 38, 34]);
+  // hazard corners on base
+  for (let x = 4; x < 12; x++) p.set(x, 41, (x % 4 < 2) ? HAZ : HAZ_D);
+  for (let x = 36; x < 44; x++) p.set(x, 41, (x % 4 < 2) ? HAZ : HAZ_D);
+});
+
+/** conduit hub: floor junction box with glowing ports (40x28) */
+def('sp_hub', 40, 28, (p) => {
+  for (let y = 4; y < 24; y++) for (let x = 2; x < 38; x++) {
+    p.set(x, y, y < 6 ? GR_L : x < 5 ? GR_L : x < 33 ? GR : GR_D);
+  }
+  for (let x = 2; x < 38; x++) { p.set(x, 4, GR_L); p.set(x, 23, GR_E); }
+  for (let y = 4; y < 24; y++) { p.set(2, y, GR_L); p.set(37, y, GR_E); }
+  // glowing ports (white — runtime tint)
+  for (const [px2, py2] of [[10, 12], [19, 9], [28, 14]] as const) {
+    p.rect(px2, py2, 4, 4, [255, 255, 255]);
+    p.rect(px2 + 1, py2 + 1, 2, 2, [220, 220, 220]);
+  }
+  // conduit stubs
+  for (const [cx, cy, w] of [[0, 13, 2], [38, 13, 2], [19, 1, 2]] as const) {
+    for (let i = 0; i < w; i++) { p.set(cx + i, cy, GR_D); p.set(cx + i, cy + 1, GR); }
+  }
+  // bolts
+  for (const [bx, by] of [[5, 7], [33, 7], [5, 20], [33, 20]] as const) p.set(bx, by, GR_E);
+});
+
+/** suspended gantry beam with hanging chain + lamp (64x22) */
+def('sp_gantry', 64, 22, (p) => {
+  // main beam
+  for (let y = 2; y < 8; y++) for (let x = 0; x < 64; x++) {
+    p.set(x, y, y === 2 ? GR_L : y < 5 ? GR : GR_D);
+  }
+  // truss diagonals
+  for (let x = 4; x < 62; x += 8) {
+    for (let i = 0; i < 5; i++) { p.set(x + i, 8 + i, GR_D); p.set(x + 7 - i, 8 + i, GR_E); }
+  }
+  // end brackets
+  for (const xx of [0, 60]) for (let y = 2; y < 14; y++) for (let x = xx; x < xx + 4; x++) {
+    p.set(x, y, y === 2 || x === xx ? GR_L : GR_D);
+  }
+  // hanging chain + lamp housing
+  for (let y = 8; y < 16; y += 2) p.set(32, y, GR_E);
+  p.rect(30, 16, 5, 4, GR_D);
+  p.rect(31, 17, 3, 2, [255, 255, 255]);
+  // hazard tips
+  for (let x = 0; x < 6; x++) { p.set(x, 13, (x % 2 === 0) ? HAZ : HAZ_D); p.set(58 + x, 13, (x % 2 === 0) ? HAZ : HAZ_D); }
+});
+
+// ---------- floor identity props (32px chunks; neutral gray — zones tint) ----------
+
+/** large floor panel: bolted quadrant plate */
+def('f_panel', 32, 32, (p) => {
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    const seam = x === 15 || x === 16 || y === 15 || y === 16;
+    p.set(x, y, seam ? [50, 54, 82] : x === 0 || y === 0 ? GR_D : GR);
+  }
+  for (let x = 1; x < 31; x++) { p.set(x, 1, GR_L); }
+  for (let y = 1; y < 31; y++) p.set(1, y, y < 14 ? GR_L : GR);
+  for (const [bx, by] of [[4, 4], [26, 4], [4, 26], [26, 26], [10, 10], [21, 10], [10, 21], [21, 21]] as const) {
+    p.set(bx, by, GR_L); p.set(bx + 1, by, GR_D);
+  }
+  // one scratched corner
+  for (const [x, y] of [[24, 24], [25, 25], [26, 26], [27, 25], [25, 27]] as const) p.set(x, y, [86, 92, 120]);
+});
+
+/** tread-plate walkway */
+def('f_walkway', 32, 32, (p) => {
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) p.set(x, y, GR);
+  for (let y = 0; y < 32; y += 8) {
+    for (let x = 0; x < 32; x++) p.set(x, y, GR_D);
+    for (let x = (y % 16 === 0 ? 2 : 6); x < 32; x += 8) p.set(x, y + 1, GR_L);
+  }
+  for (let x = 0; x < 32; x++) { p.set(x, 0, GR_D); p.set(x, 31, GR_E); }
+  for (let y = 0; y < 32; y++) { p.set(0, y, GR_D); p.set(31, y, GR_E); }
+});
+
+/** hazard-striped warning chunk */
+def('f_hazard', 32, 32, (p) => {
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    p.set(x, y, ((x + y) % 12 < 6) ? HAZ_D : [64, 58, 48]);
+  }
+  // worn edge
+  for (const [x, y] of [[3, 3], [4, 3], [3, 4], [27, 28], [28, 27], [28, 28], [16, 2], [2, 20]] as const) p.set(x, y, [86, 74, 54]);
+  for (let x = 0; x < 32; x++) { p.set(x, 0, GR_E); p.set(x, 31, GR_E); }
+  for (let y = 0; y < 32; y++) { p.set(0, y, GR_E); p.set(31, y, GR_E); }
+});
+
+/** floor vent: slotted grate with frame + glow hints */
+def('f_vent', 24, 24, (p) => {
+  for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) p.set(x, y, GR_D);
+  for (let y = 3; y < 21; y += 4) for (let x = 3; x < 21; x++) p.set(x, y, [24, 26, 42]);
+  for (let x = 3; x < 21; x += 3) for (let y = 2; y < 22; y++) p.set(x, y, GR);
+  for (let x = 0; x < 24; x++) { p.set(x, 0, GR_L); p.set(x, 23, GR_E); }
+  for (let y = 0; y < 24; y++) { p.set(0, y, GR_L); p.set(23, y, GR_E); }
+  for (const [bx, by] of [[2, 2], [20, 2], [2, 20], [20, 20]] as const) p.set(bx, by, GR_E);
+});
+
+/** conduit run: cable line with junction node (48x14) */
+def('f_conduit', 48, 14, (p) => {
+  for (let x = 0; x < 48; x++) {
+    p.set(x, 5, [40, 42, 64]); p.set(x, 6, GR); p.set(x, 7, GR_L); p.set(x, 8, GR_D);
+  }
+  // junction box mid
+  for (let y = 2; y < 12; y++) for (let x = 20; x < 28; x++) {
+    p.set(x, y, y === 2 || x === 20 ? GR_L : y >= 11 || x === 27 ? GR_E : GR);
+  }
+  p.rect(22, 5, 4, 4, [255, 255, 255]);
+  p.set(22, 5, [230, 230, 230]);
+  // clamps
+  for (const xx of [6, 14, 34, 42]) { p.set(xx, 4, GR_E); p.set(xx, 9, GR_E); }
+});
+
+// ---------- wall variants (16x34, same footprint as wall) ----------
+
+/** damaged wall segment: hole, rebar, scorch */
+def('wall_dmg', 16, 34, (p) => {
+  p.rect(0, 0, 16, 5, [152, 152, 164]);
+  p.rect(0, 5, 16, 2, [70, 70, 82]);
+  for (let y = 7; y < 32; y++) for (let x = 0; x < 16; x++) {
+    p.set(x, y, (x + y) % 9 === 0 ? [62, 62, 74] : [110, 110, 122]);
+  }
+  // blast hole
+  for (let y = 14; y < 24; y++) for (let x = 4; x < 13; x++) {
+    const dx = x - 8, dy = y - 19;
+    if (dx * dx + dy * dy < 20) p.set(x, y, [16, 16, 22]);
+    else if (dx * dx + dy * dy < 28) p.set(x, y, [40, 40, 48]);
+  }
+  // rebar across hole
+  for (const [x, y] of [[6, 16], [8, 17], [10, 18], [7, 21], [9, 22]] as const) p.set(x, y, [30, 30, 38]);
+  // scorch streaks
+  for (const [x, y] of [[3, 25], [3, 26], [12, 25], [12, 26], [12, 27], [5, 12], [5, 13]] as const) p.set(x, y, [46, 44, 52]);
+  for (let i = 0; i < 16; i++) p.set(i, 33, [48, 48, 58]);
+});
+
+/** wall with pipe run + junction */
+def('wall_pipe', 16, 34, (p) => {
+  p.rect(0, 0, 16, 5, [152, 152, 164]);
+  p.rect(0, 5, 16, 2, [70, 70, 82]);
+  for (let y = 7; y < 32; y++) for (let x = 0; x < 16; x++) p.set(x, y, (x + y) % 9 === 0 ? [62, 62, 74] : [110, 110, 122]);
+  // vertical pipe
+  for (let y = 6; y < 34; y++) { p.set(10, y, [52, 56, 86]); p.set(11, y, [128, 138, 172]); p.set(12, y, [88, 96, 132]); }
+  for (const yy of [10, 22]) { p.set(9, yy, [40, 44, 70]); p.set(13, yy, [40, 44, 70]); }
+  // valve
+  p.sphere(11, 16, 2.4, [128, 138, 172], [64, 70, 108], [196, 206, 236]);
+  p.set(11, 16, [40, 44, 70]);
+  for (let i = 0; i < 16; i++) p.set(i, 33, [48, 48, 58]);
+});
+
+/** wall strip with mounted lamp (white bulb — runtime glow) */
+def('wall_light', 16, 34, (p) => {
+  p.rect(0, 0, 16, 5, [152, 152, 164]);
+  p.rect(0, 5, 16, 2, [70, 70, 82]);
+  for (let y = 7; y < 32; y++) for (let x = 0; x < 16; x++) p.set(x, y, (x + y) % 9 === 0 ? [62, 62, 74] : [110, 110, 122]);
+  // hood + bulb
+  p.rect(5, 9, 7, 2, [56, 60, 92]);
+  p.rect(6, 11, 5, 3, [255, 255, 255]);
+  p.set(6, 11, [230, 230, 210]); p.set(10, 13, [230, 230, 210]);
+  // conduit down to lamp
+  p.set(8, 7, [40, 44, 70]); p.set(8, 8, [40, 44, 70]);
+  for (let i = 0; i < 16; i++) p.set(i, 33, [48, 48, 58]);
+});
+
+// ---------- overlays ----------
+
+/** elite crown: jagged spikes above an elite (tinted at runtime) */
+def('elite_crown', 14, 6, (p) => {
+  const a: RGB = [255, 255, 255], d: RGB = [190, 190, 210];
+  for (const [bx, h] of [[0, 3], [3, 5], [6, 6], [9, 5], [12, 3]] as const) {
+    for (let i = 0; i < h; i++) {
+      p.set(bx + 1, 5 - i, i === h - 1 ? a : d);
+      if (i < h - 1) p.set(bx, 5 - i, d);
+    }
+  }
+});
+
+/** ground direction arrow for charge/lunge telegraphs (tinted, rotated at runtime) */
+def('tg_arrow', 16, 10, (p) => {
+  const a: RGB = [255, 255, 255];
+  for (let i = 0; i < 5; i++) {
+    for (let y = 0; y <= i; y++) {
+      p.set(9 + i, 4 - y, a);
+      p.set(9 + i, 5 + y, a);
+    }
+  }
+  for (let x = 0; x < 10; x++) { p.set(x, 4, a); p.set(x, 5, a); }
+});
+
 // ---------- pack ----------
 
 function pack(): PNG {

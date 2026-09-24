@@ -16,12 +16,12 @@ export default defineConfig({
     // sibling projects in this workspace get built by parallel sessions —
     // watching them churned the dev server with constant full reloads
     watch: {
-      ignored: ['**/sis-website/**', '**/desync/**', '**/motherroot/**', '**/tmp-skilltest/**', '**/crucible/**', '**/feral/**', '**/context/**', '**/rite-shots/**'],
+      ignored: ['**/sis-website/**', '**/desync/**', '**/motherroot/**', '**/tmp-skilltest/**', '**/crucible/**', '**/feral/**', '**/context/**', '**/rite-shots/**', '**/ascent/**'],
     },
   },
   test: {
     // this is the WRECKBALL suite; motherroot/ is a separate project with its
     // own test script — don't glob its in-flux tests from this workspace root
-    exclude: ['**/node_modules/**', 'motherroot/**', 'tmp-skilltest/**', 'sis-website/**'],
+    exclude: ['**/node_modules/**', 'motherroot/**', 'tmp-skilltest/**', 'sis-website/**', 'ascent/**', 'crucible/**', 'feral/**'],
   },
 });
