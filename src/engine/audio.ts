@@ -26,8 +26,8 @@ export class AudioSys {
   private loopSrc: AudioBufferSourceNode | null = null;
   private loopBiome: string | null = null;
   private loopLevel = 0;
-  /** biome requested while its loop was still decoding — swapped when ready */
-  private pendingBiome: string | null = null;
+  /** last biome requested (loop or synth) — loops swap in when decoding finishes */
+  private currentBiome: string | null = null;
   sfxOn = true;
   musicOn = true;
 
@@ -81,8 +81,7 @@ export class AudioSys {
         }
       }
       // a run started before decoding finished: hand the synth's bus over now
-      if (this.pendingBiome && this.tryStartLoop(this.pendingBiome)) {
-        this.pendingBiome = null;
+      if (!this.loopSrc && this.currentBiome && this.tryStartLoop(this.currentBiome)) {
         this.music.stop();
       }
     })();
@@ -115,18 +114,15 @@ export class AudioSys {
    *  sequencer. No-op until unlocked. */
   startMusic(biomeId: string): void {
     if (!this.ctx || !this.musicGain) return;
-    if (this.tryStartLoop(biomeId)) {
-      this.pendingBiome = null;
-      return;
-    }
-    this.pendingBiome = biomeId; // loop may still be decoding — swap when ready
+    this.currentBiome = biomeId;
+    if (this.tryStartLoop(biomeId)) return; // loop volume applied internally
     this.music.start(this.ctx, this.musicGain, biomeId);
     this.applyMusicVolume(0.4);
   }
 
   /** Zone change: swap the biome loop (or crossfade the synth theme). */
   setMusicTheme(biomeId: string): void {
-    this.pendingBiome = null;
+    this.currentBiome = biomeId;
     if (this.loops.size > 0) {
       if (this.tryStartLoop(biomeId)) return;
       // no loop for this biome — drop any stale loop, hand over to the synth
