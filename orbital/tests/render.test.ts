@@ -107,52 +107,29 @@ describe('camera follow + shake', () => {
   });
 });
 
-describe('aim-time camera zoom', () => {
+describe('aim-time camera behavior', () => {
   const b = { cx: 0, cy: 0, rx: 800, ry: 600 };
 
-  it('eases to ~1.6x centered ahead of the ball along the aim direction', () => {
+  it('camera stays at bounds framing while aiming (no aim zoom — removed by playtest verdict)', () => {
     const cam = new Camera();
     cam.setView(1280, 720);
     cam.frame(b, true);
     const base = cam.scale;
     const ball = { x: 200, y: 50 };
-    cam.setAimState(true, 1, 0);
-    for (let i = 0; i < 240; i++) cam.update(1 / 60, ball, false);
-    expect(cam.scale / base).toBeCloseTo(1.6, 2);
-    const ahead = 0.25 * Math.min(1280, 720) / cam.scale;
-    expect(cam.cx).toBeCloseTo(200 + ahead, 1);
-    expect(cam.cy).toBeCloseTo(50, 1);
-  });
-
-  it('eases back to bounds framing on release (frame-rate independent)', () => {
-    const cam = new Camera();
-    cam.setView(1280, 720);
-    cam.frame(b, true);
-    const base = cam.scale;
-    const ball = { x: 200, y: 50 };
-    cam.setAimState(true, 1, 0);
-    for (let i = 0; i < 240; i++) cam.update(1 / 60, ball, false);
-    cam.setAimState(false, 1, 0);
     for (let i = 0; i < 240; i++) cam.update(1 / 60, ball, false);
     expect(cam.scale / base).toBeCloseTo(1, 3);
-    // expDamp is asymptotic: 4 s at rate 1.8 leaves <0.1% of the offset —
-    // sub-pixel on screen, so "home" means within a world unit here.
     expect(Math.abs(cam.cx)).toBeLessThan(1);
     expect(Math.abs(cam.cy)).toBeLessThan(1);
   });
 
-  it('flight behavior is unaffected by aim state after release', () => {
+  it('flight behavior pans with the shot at bounds scale', () => {
     const cam = new Camera();
     cam.setView(1280, 720);
     cam.frame(b, true);
     const base = cam.scale;
     const ball = { x: 300, y: 0 };
-    cam.setAimState(true, 1, 0);
-    for (let i = 0; i < 30; i++) cam.update(1 / 60, ball, false);
-    cam.setAimState(false, 1, 0);
     for (let i = 0; i < 120; i++) cam.update(1 / 60, ball, true);
     expect(cam.cx).toBeGreaterThan(0); // still follows the shot
-    // zoom relaxes back toward bounds framing during flight
     expect(cam.scale).toBeLessThan(base * 1.15);
     expect(cam.scale).toBeGreaterThan(0);
   });

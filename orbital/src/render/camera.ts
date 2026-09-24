@@ -13,8 +13,6 @@ export interface Bounds { cx: number; cy: number; rx: number; ry: number }
 export interface BallLike { x: number; y: number }
 
 const DEFAULT_MARGIN = 1.18;
-const AIM_ZOOM = 1.6;  // zoom multiplier while aiming (design polish pass)
-const AIM_BIAS = 0.25; // fraction of the zoomed viewport kept ahead of the ball
 
 export class Camera {
   /** Uniform world→screen scale. */
@@ -32,11 +30,6 @@ export class Camera {
   private baseScale = 1;
   private follow = false;
   private followCap: PtOut = { x: 0, y: 0 };
-
-  // aim-time zoom state (set from the renderer's setAim)
-  private aimOn = false;
-  private aimDirX = 1;
-  private aimDirY = 0;
 
   private shakeMag = 0;
   private t = 0;
@@ -70,16 +63,6 @@ export class Camera {
     this.scale = this.baseScale;
   }
 
-  /** Aim zoom state: while active the camera eases to AIM_ZOOM on the ball. */
-  setAimState(active: boolean, dirX: number, dirY: number): void {
-    this.aimOn = active;
-    if (active) {
-      const l = Math.hypot(dirX, dirY) || 1;
-      this.aimDirX = dirX / l;
-      this.aimDirY = dirY / l;
-    }
-  }
-
   update(dt: number, ball: BallLike, flying: boolean): void {
     this.t += dt;
 
@@ -108,15 +91,6 @@ export class Camera {
         this.followCap.x = (lx / ld) * maxD;
         this.followCap.y = (ly / ld) * maxD;
       }
-    } else if (this.aimOn) {
-      // Aim framing: zoom in on the ball, biased ~25% of the zoomed viewport
-      // ahead along the aim direction so the shot line owns the screen.
-      const zoom = this.baseScale * AIM_ZOOM;
-      const ahead = AIM_BIAS * Math.min(this.viewW, this.viewH) / zoom;
-      tgtX = ball.x + this.aimDirX * ahead;
-      tgtY = ball.y + this.aimDirY * ahead;
-      tgtScale = zoom;
-      rate = 3.2; // responsive zoom-in, same expDamp family on the way out
     } else {
       this.follow = false;
     }

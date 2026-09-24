@@ -212,7 +212,6 @@ class OrbitalRendererImpl implements OrbitalRenderer {
 
   setAim(active: boolean, dirX: number, dirY: number, power01: number): void {
     this.aimActive = active;
-    this.cam.setAimState(active, dirX, dirY); // aim-time zoom on the ball
     this.preview.setAim(active, dirX, dirY, power01);
     this.milo.setAimState(active, dirX, dirY, power01);
   }
