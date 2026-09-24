@@ -1,0 +1,27 @@
+{
+  "name": "wreckball",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WRECKBALL — a 2D GPU-driven physics survivor-like for web, mobile + desktop",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "atlas": "tsx tools/gen-atlas.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pixi.js": "^8.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  }
+}
