@@ -167,6 +167,17 @@ async function boot(): Promise<void> {
     });
   }
 
+  // landscape gate: portrait touch devices get the rotate overlay (CSS) + auto-pause;
+  // ?forcemobile=1 previews the gate on desktop for QA
+  const devForce = new URLSearchParams(location.search).has('forcemobile');
+  if (devForce) document.body.classList.add('force-portrait');
+  const portraitGate = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+  const gateChange = (): void => {
+    const gated = portraitGate.matches || document.body.classList.contains('force-portrait');
+    if (gated && phase === 'running') pauseRun();
+  };
+  portraitGate.addEventListener('change', gateChange);
+
   debugEl = document.createElement('div');
   debugEl.style.cssText = 'position:fixed;bottom:4px;left:4px;font:11px monospace;color:#8f8;background:#000a;padding:2px 8px;z-index:99;display:none;pointer-events:none;white-space:pre';
   document.body.appendChild(debugEl);

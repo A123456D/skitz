@@ -401,3 +401,48 @@ html, body {
 .stat-line b { color: var(--ink); }
 
 .row { display: flex; gap: calc(var(--ui-scale) * 0.8); flex-wrap: wrap; justify-content: center; }
+
+/* ---------- landscape lock (mobile) ---------- */
+#rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0b0e1a;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  pointer-events: all;
+}
+#rotate-overlay .rot-phone {
+  width: 40px;
+  height: 72px;
+  border: 4px solid var(--accent);
+  border-radius: 10px;
+  animation: rot-tilt 1.8s ease-in-out infinite;
+}
+@keyframes rot-tilt {
+  0%, 15% { transform: rotate(0deg); }
+  55%, 85% { transform: rotate(-90deg); }
+  100% { transform: rotate(-90deg); }
+}
+#rotate-overlay .rot-text {
+  font-family: inherit;
+  font-size: calc(var(--ui-scale) * 1.6);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+#rotate-overlay .rot-sub {
+  font-family: inherit;
+  font-size: calc(var(--ui-scale) * 0.9);
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate-overlay { display: flex; }
+}
+/* dev/QA escape: ?forcemobile=1 previews the gate on desktop */
+body.force-portrait #rotate-overlay { display: flex; }
