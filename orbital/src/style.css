@@ -1,0 +1,43 @@
+/* ORBITAL: THE LAST TEE — base chrome. UI system styles live in src/ui/ui.css. */
+:root {
+  --bg: #050810;
+  --ink: #e8ecf4;
+  --accent: #ffb347;      /* interactive / pins */
+  --gravity: #6fd6e8;     /* gravity language */
+  --danger: #ff5d47;
+  --muted: #8b93a7;
+  --panel: rgba(10, 16, 30, 0.82);
+  --ui-font: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui-font);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app { position: fixed; inset: 0; }
+
+canvas { display: block; }
+
+/* Boot overlay — replaced once the UI system mounts */
+#boot {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 12px; color: var(--muted);
+  letter-spacing: 0.35em; font-size: 13px;
+}
+#boot .ring {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid rgba(111, 214, 232, 0.25);
+  border-top-color: var(--gravity);
+  animation: bootspin 1.1s linear infinite;
+}
+@keyframes bootspin { to { transform: rotate(360deg); } }
