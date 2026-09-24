@@ -7,7 +7,7 @@ import { ParticleSys } from './particles';
 import { damageNumberLayer, installDamageFont, spawnNumber, updateNumbers } from './damageNumbers';
 import type { Run, FxSink } from '../game/run';
 import { ENEMY_DEFS, ENEMY } from '../game/data/enemies';
-import { OBST_CRATE, OBST_CHEST, OBST_PILLAR, ARENA_H, ARENA_W, type World } from '../game/state';
+import { OBST_CRATE, OBST_CHEST, OBST_PILLAR, OBST_PROP, ARENA_H, ARENA_W, type World } from '../game/state';
 import { trailNodesForRender } from '../game/weapons';
 import { WEAPONS } from '../game/data/weapons';
 import { BallRig } from './ballRig';
@@ -123,6 +123,7 @@ export class WorldRenderer implements FxSink {
     rings: Container;
     flashes: Container;
     particles: Container;
+    ganim: Graphics;
     zaps: Graphics;
     meteors: Graphics;
     meteorPool: Container;
@@ -153,6 +154,10 @@ export class WorldRenderer implements FxSink {
   private meteorSprites: Sprite[] = [];
   private tgArrows: Sprite[] = [];
   private bossColumn: Sprite | null = null;
+  private bumperSprites: Sprite[] = [];
+  private ventSpots: Array<{ x: number; y: number }> = [];
+  private setPieceNames: string[] = [];
+  private ventAcc = 0;
 
   private particles!: ParticleSys;
   private shards!: ParticleSys;
@@ -343,6 +348,8 @@ export class WorldRenderer implements FxSink {
 
     const terraces = new Graphics();
     const patches = new Graphics();
+    // per-frame animated ground layer (scrolling boost chevrons, jump-pad pulses)
+    const ganim = new Graphics();
     const scenery = new Container();
     const shadows = new Container();
     // y-sorted actor layer: obstacles + enemies + the player share one depth order
@@ -432,11 +439,11 @@ export class WorldRenderer implements FxSink {
     }
     const numbers = damageNumberLayer();
 
-    this.root.addChild(sky, farRigs.shapes, farRigs.windows, midRigs.shapes, midRigs.windows, nearRigs.shapes, nearRigs.windows, fog, glowPool, zoneFloors, scenery, patches, terraces, walls, wallSegs, shadows, trail, ghosts, orbitPath, gems, rewards, tg, actors, rings, spikes, bolts, vbullets, this.particles.container, this.shards.container, flashes, zaps, numbers);
+    this.root.addChild(sky, farRigs.shapes, farRigs.windows, midRigs.shapes, midRigs.windows, nearRigs.shapes, nearRigs.windows, fog, glowPool, zoneFloors, scenery, patches, ganim, terraces, walls, wallSegs, shadows, trail, ghosts, orbitPath, gems, rewards, tg, actors, rings, spikes, bolts, vbullets, this.particles.container, this.shards.container, flashes, zaps, numbers);
     this.root.addChildAt(meteors, this.root.getChildIndex(shadows));
     this.root.addChild(meteorPool);
 
-    this.layers = { sky, bgFar: farRigs.shapes, bgMid: midRigs.shapes, bgNear: nearRigs.shapes, fog, zoneFloors, scenery, patches, terraces, walls, wallSegs, wallDeco, shadows, trail, ghosts, orbitPath, gems, rewards, actors, rings, flashes, particles: this.particles.container, zaps, numbers, bolts, vbullets, spikes, meteors, meteorPool, tg };
+    this.layers = { sky, bgFar: farRigs.shapes, bgMid: midRigs.shapes, bgNear: nearRigs.shapes, fog, zoneFloors, scenery, patches, ganim, terraces, walls, wallSegs, wallDeco, shadows, trail, ghosts, orbitPath, gems, rewards, actors, rings, flashes, particles: this.particles.container, zaps, numbers, bolts, vbullets, spikes, meteors, meteorPool, tg };
     this.bgWindows = [farRigs.windows, midRigs.windows, nearRigs.windows];
   }
 
@@ -494,77 +501,52 @@ export class WorldRenderer implements FxSink {
     const pg = this.layers.patches;
     pg.clear();
     for (const p of w.patches) {
+      if (p.kind === 'slick') continue; // drawn as striped floor sprites at the hazard pads
       const tint = p.kind === 'ice' ? 0xbfe8ff : 0x8a6a3a;
       const alpha = p.kind === 'ice' ? 0.3 : 0.34;
       pg.circle(p.x, p.y * GROUND_TILT, p.r).fill({ color: tint, alpha });
       pg.circle(p.x, p.y * GROUND_TILT, p.r).stroke({ width: 2, color: tint, alpha: alpha + 0.2 });
     }
+    // boost pads: static base plate (chevrons scroll per-frame in ganim)
     for (const p of w.boostPads) {
-      pg.rect(p.x, p.y * GROUND_TILT, p.w, p.h * GROUND_TILT).fill({ color: 0xffd23f, alpha: 0.16 });
-      const cx = p.x + p.w / 2;
-      const cy = p.y * GROUND_TILT + (p.h * GROUND_TILT) / 2;
-      const chevrons = Math.max(2, Math.floor(Math.max(p.w, p.h) / 34));
-      for (let c = 0; c < chevrons; c++) {
-        const t = (c + 0.5) / chevrons;
-        const ax = cx - p.dx * (p.w / 2) + p.dx * p.w * t;
-        const ay = cy - p.dy * (p.h / 2) * GROUND_TILT + p.dy * p.h * t * GROUND_TILT;
-        const sz = 9;
-        pg.moveTo(ax - (p.dy !== 0 ? sz : sz * 0.4), ay - (p.dx !== 0 ? sz * GROUND_TILT : sz));
-        pg.lineTo(ax + (p.dx !== 0 ? sz : 0), ay + (p.dy !== 0 ? sz * GROUND_TILT : 0));
-        pg.lineTo(ax - (p.dy !== 0 ? sz : sz * 0.4), ay + (p.dx !== 0 ? sz * GROUND_TILT : sz));
-        pg.stroke({ width: 3, color: 0xffd23f, alpha: 0.75 });
-      }
+      pg.rect(p.x, p.y * GROUND_TILT, p.w, p.h * GROUND_TILT).fill({ color: 0xffd23f, alpha: 0.14 });
+      pg.rect(p.x, p.y * GROUND_TILT, p.w, p.h * GROUND_TILT).stroke({ width: 2, color: 0xffd23f, alpha: 0.5 });
     }
+    // jump pads: static well (rising chevrons animate per-frame in ganim)
     for (const j of w.jumpPads) {
-      pg.circle(j.x, j.y * GROUND_TILT, 24).fill({ color: 0x57e389, alpha: 0.22 });
-      pg.circle(j.x, j.y * GROUND_TILT, 24).stroke({ width: 2, color: 0x57e389, alpha: 0.7 });
-      pg.circle(j.x, j.y * GROUND_TILT, 10).fill({ color: 0x57e389, alpha: 0.5 });
+      pg.circle(j.x, j.y * GROUND_TILT, 24).fill({ color: 0x57e389, alpha: 0.18 });
+      pg.circle(j.x, j.y * GROUND_TILT, 24).stroke({ width: 2, color: 0x57e389, alpha: 0.55 });
     }
+    // bumpers: painted base ring only — the 3/4 dome sprite (squashes on hit) draws above it
     for (const b of w.bumpers) {
-      pg.circle(b.x, b.y * GROUND_TILT, b.r).fill({ color: 0xff5470, alpha: 0.3 });
+      pg.circle(b.x, b.y * GROUND_TILT, b.r).fill({ color: 0xff5470, alpha: 0.25 });
       pg.circle(b.x, b.y * GROUND_TILT, b.r).stroke({ width: 3, color: 0xff7a9a, alpha: 0.85 });
     }
 
     // ---- authored environment pass (side rng keeps the sim sequence untouched) ----
-    // 1) SET PIECES: large landmarks per zone at designed anchors — the world feels built, not scattered
+    // 1) SET PIECES: sim-placed landmarks (solid ones have OBST_PROP colliders)
     // 2) FLOOR IDENTITY: walkway lanes, conduit runs, hazard pads, panel fields via constrained chunk rules
     // 3) SCATTER: reduced, clustered around landmarks, min-distance checks — no uniform confetti
     const rng = new Rng((w.seed ^ 0x9e3779b9) >>> 0);
     this.layers.scenery.removeChildren();
     const glowSpots: Array<{ x: number; ry: number; tint: number; scale: number; alpha: number }> = [];
 
-    const BIOME_SET_PIECES: Record<string, string[]> = {
-      iron: ['sp_door', 'sp_gantry', 'sp_reactor', 'sp_hub'],
-      frost: ['sp_tank', 'sp_pipes', 'sp_reactor', 'sp_hub'],
-      rust: ['sp_pipes', 'sp_door', 'sp_generator', 'sp_hub'],
-      ember: ['sp_generator', 'sp_reactor', 'sp_pipes', 'sp_hub'],
-    };
-    // glowing-core props get an accent light pool
     const GLOWING_PROPS = new Set(['sp_reactor', 'sp_generator', 'sp_hub']);
-    // designed anchors (fractions of the zone rect), seeded jitter keeps runs fresh
-    const ANCHORS: Array<[number, number]> = [[0.24, 0.3], [0.76, 0.22], [0.28, 0.76], [0.74, 0.74]];
     const setPieceSpots: Array<{ x: number; y: number }> = [];
-    for (const zone of w.zones) {
-      const props = BIOME_SET_PIECES[zone.biome.id] ?? BIOME_SET_PIECES.iron;
-      for (let i = 0; i < props.length; i++) {
-        const [fx, fy] = ANCHORS[i % ANCHORS.length];
-        const jx = fx * zone.w + (rng.next() - 0.5) * 120;
-        const jy = fy * zone.h + (rng.next() - 0.5) * 120;
-        const x = zone.x + Math.max(90, Math.min(zone.w - 90, jx));
-        const y = zone.y + Math.max(90, Math.min(zone.h - 90, jy));
-        if (w.groundHeightAt(x, y) > 0 || w.patchAt(x, y)) continue; // keep clear of terraces/ice/goo
-        const s = new Sprite(this.atlas[props[i]]);
-        s.anchor.set(0.5, 1);
-        s.position.set(Math.round(x), Math.round(y * GROUND_TILT));
-        s.tint = 0xdde3f0; // light steel so baked detail reads in every biome
-        s.scale.set(1.9);
-        this.layers.scenery.addChild(s);
-        setPieceSpots.push({ x, y });
-        if (GLOWING_PROPS.has(props[i])) {
-          glowSpots.push({ x, ry: (y - 16) * GROUND_TILT, tint: zone.biome.accent, scale: 190, alpha: 0.3 });
-        } else {
-          glowSpots.push({ x, ry: y * GROUND_TILT, tint: zone.biome.accent, scale: 140, alpha: 0.12 });
-        }
+    this.setPieceNames.length = 0;
+    for (const sp of w.setPieces) {
+      const s = new Sprite(this.atlas[sp.name]);
+      s.anchor.set(0.5, 1);
+      s.position.set(Math.round(sp.x), Math.round(sp.y * GROUND_TILT));
+      s.tint = 0xdde3f0; // light steel so baked detail reads in every biome
+      s.scale.set(1.9);
+      this.layers.scenery.addChild(s);
+      setPieceSpots.push({ x: sp.x, y: sp.y });
+      this.setPieceNames.push(sp.name);
+      if (GLOWING_PROPS.has(sp.name)) {
+        glowSpots.push({ x: sp.x, ry: (sp.y - 16) * GROUND_TILT, tint: w.zoneAt(sp.x, sp.y).biome.accent, scale: 190, alpha: 0.3 });
+      } else {
+        glowSpots.push({ x: sp.x, ry: sp.y * GROUND_TILT, tint: w.zoneAt(sp.x, sp.y).biome.accent, scale: 140, alpha: 0.12 });
       }
     }
 
@@ -604,15 +586,17 @@ export class WorldRenderer implements FxSink {
           put('f_walkway', lx, y, Math.PI / 2);
         }
       }
-      // hazard pads at the zone's four corners + dead center (warning paint near gates)
-      for (const [fx, fy] of [[0.08, 0.08], [0.92, 0.08], [0.08, 0.92], [0.92, 0.92], [0.5, 0.5]] as const) {
-        put('f_hazard', zone.x + fx * zone.w, zone.y + fy * zone.h);
+      // hazard pads: striped warning paint exactly where the sim says the floor is slick
+      for (const hp of w.hazardPads) {
+        put('f_hazard', hp.x, hp.y);
       }
       // vents along lanes + panels scattered sparsely (avoid lanes)
+      this.ventSpots.length = 0;
       for (let v = 0; v < 7; v++) {
         const lx = lanesV[v % 2] + (rng.next() - 0.5) * 260;
         const ly = zone.y + 140 + rng.next() * (zone.h - 280);
         put('f_vent', lx, ly);
+        this.ventSpots.push({ x: lx, y: ly });
       }
       for (let p2 = 0; p2 < 26; p2++) {
         const px2 = zone.x + 70 + rng.next() * (zone.w - 140);
@@ -735,6 +719,17 @@ export class WorldRenderer implements FxSink {
       s.visible = false;
     }
 
+    // bumper domes: 3/4 sprites rebuilt per run (they squash when something is flung)
+    this.bumperSprites.length = 0;
+    for (const b of w.bumpers) {
+      const s = new Sprite(this.atlas.bumper_dome);
+      s.anchor.set(0.5, 1);
+      s.position.set(b.x, b.y * GROUND_TILT + 8);
+      s.tint = 0xff8aa8;
+      this.layers.scenery.addChild(s);
+      this.bumperSprites.push(s);
+    }
+
     // reward sprites: coin piles for caches, glowing markers for shrines
     for (let i = 0; i < this.rewardSprites.length; i++) this.rewardSprites[i].visible = false;
     let ri = 0;
@@ -804,6 +799,7 @@ export class WorldRenderer implements FxSink {
     // --- obstacles (y-sorted, base-anchored, damage states) ---
     for (let i = 0; i < w.oCount; i++) {
       const s = this.obstacleSprites[i];
+      if (w.otype[i] === OBST_PROP) { s.visible = false; continue; } // drawn as a set piece
       const alive = !(w.otype[i] === OBST_CRATE && w.ohp[i] <= 0);
       s.visible = alive && inView(w.ox[i], w.oy[i], 60);
       if (!s.visible || !alive) continue;
@@ -991,9 +987,13 @@ export class WorldRenderer implements FxSink {
           : WHITE;
       }
 
-      s.scale.set(baseScale * sx, baseScale * sy);
+      // character: enemies face their movement direction and lean into it
+      const flip = w.evx[i] < -12 ? -1 : 1;
+      s.scale.set(baseScale * sx * flip, baseScale * sy);
+      const lean = Math.min(0.09, Math.abs(w.evx[i]) * 0.0006);
       if (stretchRot !== null) s.rotation = stretchRot;
-      else if (type !== ENEMY.imp) s.rotation = 0;
+      else if (type !== ENEMY.imp) s.rotation = lean;
+      else s.rotation = 0;
       s.y += yOffset;
       s.zIndex = w.ey[i];
     }
@@ -1300,6 +1300,64 @@ export class WorldRenderer implements FxSink {
     this.particles.update(dt);
     this.shards.update(dt);
     updateNumbers(dt);
+
+    // --- animated ground hazards (each animation communicates what the pad does) ---
+    const ga = this.layers.ganim;
+    ga.clear();
+    // boost pads: chevrons scroll along the launch direction — shows where you'll go
+    for (const p of w.boostPads) {
+      if (!inView(p.x, p.y, 80)) continue;
+      const cx = p.x + p.w / 2;
+      const cy = p.y * GROUND_TILT + (p.h * GROUND_TILT) / 2;
+      const len = Math.max(p.w, p.h);
+      const chevrons = Math.max(2, Math.floor(len / 34));
+      const scroll = (w.time * 0.9) % (1 / chevrons) * chevrons;
+      for (let c = -1; c < chevrons; c++) {
+        const t = (c + scroll) / chevrons;
+        if (t < 0 || t > 1) continue;
+        const fade = Math.sin(t * Math.PI);
+        const ax = cx - p.dx * (p.w / 2) + p.dx * p.w * t;
+        const ay = cy - p.dy * (p.h / 2) * GROUND_TILT + p.dy * p.h * t * GROUND_TILT;
+        const sz = 9;
+        ga.moveTo(ax - (p.dy !== 0 ? sz : sz * 0.4), ay - (p.dx !== 0 ? sz * GROUND_TILT : sz));
+        ga.lineTo(ax + (p.dx !== 0 ? sz : 0), ay + (p.dy !== 0 ? sz * GROUND_TILT : 0));
+        ga.lineTo(ax - (p.dy !== 0 ? sz : sz * 0.4), ay + (p.dx !== 0 ? sz * GROUND_TILT : sz));
+        ga.stroke({ width: 3, color: 0xffd23f, alpha: 0.2 + fade * 0.6 });
+      }
+    }
+    // jump pads: chevrons rise and fade — the pad pushes UP
+    for (const j of w.jumpPads) {
+      if (!inView(j.x, j.y, 60)) continue;
+      const cycle = (w.time * 1.1) % 1;
+      for (const off of [cycle, (cycle + 0.5) % 1]) {
+        const yy = j.y * GROUND_TILT - 4 - off * 26;
+        ga.moveTo(j.x - 9, yy + 7);
+        ga.lineTo(j.x, yy);
+        ga.lineTo(j.x + 9, yy + 7);
+        ga.stroke({ width: 3, color: 0x57e389, alpha: (1 - off) * 0.85 });
+      }
+    }
+    // bumper domes: squash springy when something is flung, idle breathing otherwise
+    for (let i = 0; i < w.bumpers.length && i < this.bumperSprites.length; i++) {
+      const b = w.bumpers[i];
+      const s = this.bumperSprites[i];
+      if (!inView(b.x, b.y, 70)) { s.visible = false; continue; }
+      s.visible = true;
+      const squash = Math.min(0.5, b.flash * 1.7);
+      s.scale.set(1.7 + squash * 0.35, (1.7 - squash) * (1 + Math.sin(w.time * 3 + i) * 0.03));
+      s.y = b.y * GROUND_TILT + 8 - squash * 3;
+    }
+    // vents puff steam on a slow cadence — machinery is alive even when idle
+    this.ventAcc -= dt;
+    if (this.ventAcc <= 0) {
+      this.ventAcc = 0.45;
+      for (const v of this.ventSpots) {
+        if (!inView(v.x, v.y, 40)) continue;
+        if (this.rng() < 0.35) {
+          this.particles.spawn(v.x + (this.rng() - 0.5) * 12, v.y * GROUND_TILT, (this.rng() - 0.5) * 14, -36 - this.rng() * 28, 1.5, 1.2, 0x9aa8c8, -12, 0);
+        }
+      }
+    }
 
     // --- ambient zone particles ---
     this.ambientAcc += dt;

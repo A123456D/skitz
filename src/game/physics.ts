@@ -51,6 +51,7 @@ export function stepPlayer(w: World, inputX: number, inputY: number, dt: number,
   const patch = w.patchAt(w.px, w.py);
   const onIce = patch === 'ice';
   const onGoo = patch === 'goo';
+  const onSlick = patch === 'slick'; // hazard-painted floor: slippery, not slow
   if (w.playerSlowT > 0) w.playerSlowT -= dt;
   const slowed = w.playerSlowT > 0 ? 0.72 : 1;
 
@@ -107,7 +108,7 @@ export function stepPlayer(w: World, inputX: number, inputY: number, dt: number,
     w.pvy = w.dashDy * s.speed * 4.4;
   } else {
     // rolling ball: accelerate toward input, keep a little drift
-    const accel = onIce ? 2.4 : 9; // ice: drift
+    const accel = onIce ? 2.4 : onSlick ? 4.6 : 9; // ice: heavy drift; slick: warning-paint slide
     const speedMul = (onGoo ? 0.72 : 1) * slowed; // goo: sluggish; Frostbound auras chill
     const tx = inputX * s.speed * speedMul;
     const ty = inputY * s.speed * speedMul;
@@ -466,7 +467,7 @@ export function stepEnemies(w: World, dt: number, ev: Events): void {
       w.eslow[i] -= dt;
       spd *= 0.45; // Tesla Web / Stormcaller static
     }
-    const steerRate = ePatch === 'ice' ? 1.0 : 3.2; // ice: everything slides
+    const steerRate = ePatch === 'ice' ? 1.0 : ePatch === 'slick' ? 1.9 : 3.2; // ice: everything slides
     const k = 1 - Math.exp(-steerRate * dt);
     w.evx[i] += (dx * spd - w.evx[i]) * k;
     w.evy[i] += (dy * spd - w.evy[i]) * k;

@@ -29,6 +29,8 @@ export const GEM_GOLD = 1;
 export const OBST_PILLAR = 0;
 export const OBST_CRATE = 1;
 export const OBST_CHEST = 2;
+/** set-piece collider (blast door / tank / pipes) — solid like a pillar, but drawn as a landmark */
+export const OBST_PROP = 3;
 
 export type RewardKind = 'cache' | 'shrine_might' | 'shrine_regen' | 'shrine_magnet';
 
@@ -208,7 +210,7 @@ export class World {
   hash: SpatialHash;
 
   // ---- obstacles (static; rebuilt hash only when one is destroyed) ----
-  oCap = 48;
+  oCap = 64;
   oCount = 0;
   ox: Float32Array;
   oy: Float32Array;
@@ -222,6 +224,10 @@ export class World {
   biome: Biome;
   /** raised regions: x, y, w, h in world px, z = ground height */
   terraces: Array<{ x: number; y: number; w: number; h: number; z: number }> = [];
+
+  // ---- authored environment (placed by the sim so colliders match the art) ----
+  setPieces: Array<{ name: string; x: number; y: number; solid: boolean }> = [];
+  hazardPads: Array<{ x: number; y: number }> = [];
 
   // ---- multi-zone world ----
   zones: ZoneDef[] = ZONES;
@@ -339,6 +345,7 @@ export class World {
 
     this.biome = this.zones[0].biome;
     this.generateTerraces();
+    this.generateSetPieces();
     this.generateObstacles();
     this.generateZoneFeatures();
 
@@ -348,6 +355,44 @@ export class World {
   }
 
   // ---------- obstacles ----------
+
+  /** Per-biome landmark set pieces. Solid ones get OBST_PROP colliders so the
+   *  world's "solid" structures actually are solid. */
+  private generateSetPieces(): void {
+    const BIOME_SET_PIECES: Record<string, string[]> = {
+      iron: ['sp_door', 'sp_gantry', 'sp_reactor', 'sp_hub'],
+      frost: ['sp_tank', 'sp_pipes', 'sp_reactor', 'sp_hub'],
+      rust: ['sp_pipes', 'sp_door', 'sp_generator', 'sp_hub'],
+      ember: ['sp_generator', 'sp_reactor', 'sp_pipes', 'sp_hub'],
+    };
+    const SOLID_RADIUS: Record<string, number> = {
+      sp_door: 40, sp_tank: 34, sp_reactor: 30, sp_generator: 40, sp_pipes: 30,
+    };
+    const ANCHORS: Array<[number, number]> = [[0.24, 0.3], [0.76, 0.22], [0.28, 0.76], [0.74, 0.74]];
+    for (const zone of this.zones) {
+      const props = BIOME_SET_PIECES[zone.biome.id] ?? BIOME_SET_PIECES.iron;
+      for (let i = 0; i < props.length; i++) {
+        const [fx, fy] = ANCHORS[i % ANCHORS.length];
+        const x = zone.x + Math.max(110, Math.min(zone.w - 110, fx * zone.w + this.rng.range(-60, 60)));
+        const y = zone.y + Math.max(110, Math.min(zone.h - 110, fy * zone.h + this.rng.range(-60, 60)));
+        if (this.groundHeightAt(x, y) > 0) continue;
+        const solidR = SOLID_RADIUS[props[i]];
+        const solid = solidR !== undefined;
+        this.setPieces.push({ name: props[i], x, y, solid });
+        if (solid && this.oCount < this.oCap) {
+          const i2 = this.oCount++;
+          this.ox[i2] = x;
+          this.oy[i2] = y;
+          this.oradius[i2] = solidR;
+          this.ohp[i2] = -1;
+          this.omaxhp[i2] = -1;
+          this.otype[i2] = OBST_PROP;
+          this.oflash[i2] = 0;
+        }
+      }
+    }
+    this.rebuildObstHash();
+  }
 
   /** Scatter pillars + crates away from the spawn and each other. */
   private generateObstacles(): void {
@@ -444,13 +489,40 @@ export class World {
         this.patches.push({ x: zone.x + p.x + jit(60), y: zone.y + p.y + jit(60), r: p.r, kind: p.kind });
       }
       for (const b of zf.bumpers ?? []) {
-        this.bumpers.push({ x: zone.x + b.x + jit(70), y: zone.y + b.y + jit(70), r: b.r, flash: 0 });
+        let bx = zone.x + b.x + jit(70);
+        let by = zone.y + b.y + jit(70);
+        // relocate out of any set piece collider rather than dropping the pad
+        if (this.blocked(bx, by, 30)) {
+          let placed = false;
+          for (let ring = 40; ring <= 160 && !placed; ring += 40) {
+            for (const [ox, oy] of [[ring, 0], [-ring, 0], [0, ring], [0, -ring], [ring, ring], [-ring, -ring], [ring, -ring], [-ring, ring]] as const) {
+              if (!this.blocked(bx + ox, by + oy, 30)) { bx += ox; by += oy; placed = true; break; }
+            }
+          }
+          if (!placed) continue;
+        }
+        // hazard paint warns about the real hazard: slick paint beside every bumper
+        this.bumpers.push({ x: bx, y: by, r: b.r, flash: 0 });
+        this.hazardPads.push({ x: bx + 78, y: by + 78 });
+        this.patches.push({ x: bx + 78, y: by + 78, r: 46, kind: 'slick' });
       }
       for (const pd of zf.pads ?? []) {
         this.boostPads.push({ x: zone.x + pd.x, y: zone.y + pd.y, w: pd.w, h: pd.h, dx: pd.dx, dy: pd.dy, flash: 0 });
       }
       for (const jp of zf.jumpPads ?? []) {
-        this.jumpPads.push({ x: zone.x + jp.x + jit(60), y: zone.y + jp.y + jit(60), flash: 0 });
+        let jx = zone.x + jp.x + jit(60);
+        let jy = zone.y + jp.y + jit(60);
+        // relocate to the nearest free ring if a set piece took the spot
+        if (this.blocked(jx, jy, 26)) {
+          let placed = false;
+          for (let ring = 40; ring <= 160 && !placed; ring += 40) {
+            for (const [ox, oy] of [[ring, 0], [-ring, 0], [0, ring], [0, -ring], [ring, ring], [-ring, -ring], [ring, -ring], [-ring, ring]] as const) {
+              if (!this.blocked(jx + ox, jy + oy, 26)) { jx += ox; jy += oy; placed = true; break; }
+            }
+          }
+          if (!placed) continue;
+        }
+        this.jumpPads.push({ x: jx, y: jy, flash: 0 });
       }
       for (const r of zf.rewards ?? []) {
         let x = zone.x + r.x + jit(50);

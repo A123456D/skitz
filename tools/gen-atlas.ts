@@ -500,8 +500,48 @@ def('imp', 16, 16, (p) => {
 });
 
 def('swarmie', 16, 16, (p) => {
-  p.sphere(8, 9, 4.5, [255, 126, 219], [140, 40, 110], [255, 205, 240]);
-  p.eyes(8, 9, 2, [50, 10, 40], WHITE);
+  // tiny scuttling bug: round body, antennae, splayed legs, big nervous eyes
+  const body: RGB = [255, 126, 219], bodyD: RGB = [140, 40, 110], bodyL: RGB = [255, 205, 240];
+  const leg: RGB = [100, 28, 80];
+  // legs (3 per side, splayed)
+  for (const [x0, y0, x1, y1] of [[3, 9, 1, 11], [3, 12, 1, 14], [12, 9, 14, 11], [12, 12, 14, 14]] as const) {
+    p.set(x0, y0, leg); p.set(x1, y1, leg);
+  }
+  // body
+  p.sphere(8, 9, 4.6, body, bodyD, bodyL);
+  // shell seam
+  for (let x = 5; x <= 11; x++) p.set(x, 11, bodyD);
+  // antennae
+  p.set(6, 4, leg); p.set(5, 3, leg); p.set(6, 3, bodyL);
+  p.set(10, 4, leg); p.set(11, 3, leg); p.set(10, 3, bodyL);
+  // big nervous eyes (white sclera + dark pupil)
+  for (const ex of [6, 10]) {
+    p.set(ex, 7, [255, 255, 255]); p.set(ex + 1, 7, [255, 255, 255]);
+    p.set(ex, 8, [255, 255, 255]);
+    p.set(ex, 7, [40, 10, 40]);
+  }
+  p.set(6, 7, [255, 255, 255]); p.set(10, 7, [255, 255, 255]);
+  p.set(7, 8, [40, 10, 40]); p.set(11, 8, [40, 10, 40]);
+});
+
+
+
+
+
+
+/** 3/4 pinball bumper dome: squash-scales on hit (tinted pink at runtime) */
+def('bumper_dome', 26, 18, (p) => {
+  const base: RGB = [110, 116, 150], baseD: RGB = [56, 60, 92], dome: RGB = [210, 216, 240];
+  // base plate
+  for (let y = 13; y < 18; y++) for (let x = 3; x < 23; x++) {
+    p.set(x, y, y === 13 ? base : y >= 17 ? baseD : [86, 90, 122]);
+  }
+  // dome
+  p.ellipse(13, 9, 10, 6, dome, baseD, [244, 248, 255]);
+  // specular
+  p.set(9, 5, [255, 255, 255]); p.set(10, 4, [255, 255, 255]); p.set(11, 4, [255, 255, 255]);
+  // band around the dome foot
+  for (let x = 5; x < 21; x++) p.set(x, 12, baseD);
 });
 
 def('tank', 20, 20, (p) => {
@@ -513,20 +553,43 @@ def('tank', 20, 20, (p) => {
 });
 
 def('splitter', 16, 16, (p) => {
-  p.ellipse(8, 10, 6.5, 5, [77, 225, 255], [20, 100, 140], [220, 250, 255]);
-  p.eyes(8, 9, 3, [8, 40, 60], WHITE);
+  // jelly with a visible inner nucleus, membrane sheen and a forming drip
+  const a: RGB = [77, 225, 255], d: RGB = [20, 100, 140], l: RGB = [220, 250, 255];
+  p.ellipse(8, 10, 6.5, 5, a, d, l);
+  for (const [x, y] of [[4, 7], [5, 6], [6, 5], [7, 5], [8, 5]] as const) p.set(x, y, l);
+  p.sphere(8, 11, 2.4, [30, 160, 200], [12, 90, 120], [150, 220, 250]);
+  p.set(7, 10, [200, 240, 255]);
+  p.set(12, 14, a); p.set(12, 15, d);
+  p.rect(4, 9, 2, 2, [8, 40, 60]);
+  p.rect(10, 9, 2, 2, [8, 40, 60]);
+  p.set(4, 9, [220, 250, 255]); p.set(10, 9, [220, 250, 255]);
 });
 
 def('splitter_half', 16, 16, (p) => {
-  p.ellipse(8, 11, 4, 3.4, [77, 225, 255], [20, 100, 140], [220, 250, 255]);
-  p.eyes(8, 10, 2, [8, 40, 60], WHITE);
+  const a: RGB = [77, 225, 255], d: RGB = [20, 100, 140], l: RGB = [220, 250, 255];
+  p.ellipse(8, 11, 4, 3.4, a, d, l);
+  for (const [x, y] of [[5, 9], [6, 8], [7, 8]] as const) p.set(x, y, l);
+  p.sphere(8, 12, 1.5, [30, 160, 200], [12, 90, 120], [150, 220, 250]);
+  p.set(6, 10, [8, 40, 60]); p.set(10, 10, [8, 40, 60]);
+  p.set(11, 14, a);
 });
 
 def('spitter', 16, 16, (p) => {
-  p.sphere(8, 9, 6, [178, 102, 255], [90, 30, 150], [235, 205, 255]);
-  const mouth: RGB = [30, 8, 50];
-  p.rect(7, 12, 3, 2, mouth);
-  p.eyes(8, 7, 3, [30, 8, 50], [255, 200, 255]);
+  // pitcher-plant horror: bulbous head, wide-open glowing maw, spotted hide
+  const a: RGB = [178, 102, 255], d: RGB = [90, 30, 150], l: RGB = [235, 205, 255];
+  p.sphere(8, 7.6, 6.2, a, d, l);
+  for (const [x, y] of [[3, 5], [12, 4], [13, 8], [3, 9]] as const) p.set(x, y, [140, 70, 210]);
+  p.rect(5, 11, 7, 4, [30, 8, 50]);
+  p.rect(6, 13, 5, 2, [255, 170, 90]);
+  p.set(6, 12, [255, 210, 130]); p.set(10, 12, [255, 210, 130]);
+  p.set(5, 11, [60, 16, 90]); p.set(11, 11, [60, 16, 90]);
+  for (let x = 4; x <= 12; x++) p.set(x, 10, l);
+  for (const ex of [4, 10]) {
+    p.rect(ex, 5, 2, 2, [20, 6, 36]);
+    p.set(ex, 5, [255, 220, 255]);
+  }
+  for (let x = 3; x <= 6; x++) p.set(x, 4, d);
+  for (let x = 9; x <= 12; x++) p.set(x, 4, d);
 });
 
 def('exploder', 16, 16, (p) => {

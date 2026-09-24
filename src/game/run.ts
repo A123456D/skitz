@@ -326,7 +326,7 @@ export class Run {
         this.fx?.shake(11, 0.32);
       },
       bumperHit: (x, y) => {
-        audio.jump();
+        audio.bumper();
         this.fx?.bumperFx(x, y);
       },
       jumpPad: (x, y) => {
@@ -349,7 +349,7 @@ export class Run {
         this.fx?.goldBurst(x, y);
       },
       chestOpened: (x, y) => {
-        audio.smash();
+        audio.chest();
         this.fx?.goldBurst(x, y);
         this.fx?.shake(4, 0.15);
       },

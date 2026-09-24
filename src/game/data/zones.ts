@@ -66,7 +66,7 @@ export const WALL_SEGS: WallSeg[] = [
   { x: MAP_W / 2 - 360, y: MAP_H / 2 + 190, w: 170, h: 32 },
 ];
 
-export type PatchKind = 'ice' | 'goo';
+export type PatchKind = 'ice' | 'goo' | 'slick';
 export interface PatchDef {
   x: number;
   y: number;
