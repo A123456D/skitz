@@ -9,9 +9,11 @@ import { makeWorldRenderer, type WorldRenderer } from './render/world';
 import { PostFx } from './render/post';
 import { Run } from './game/run';
 import { CHARACTERS } from './game/data/characters';
+import { ENEMY } from './game/data/enemies';
+import { unlockDef } from './game/data/unlocks';
 import { BIOMES } from './game/data/biomes';
 import type { PendingChoice } from './game/state';
-import { getSave, recordRun, addGold } from './save/save';
+import { getSave, recordRun, addGold, grantDepthUnlocks } from './save/save';
 import { buildHud, hurtFlash, hudPauseButton, toast, updateHud } from './ui/hud';
 import { hideLevelUp, initLevelUp, showLevelUp } from './ui/levelup';
 import { hideAllScreens, initMenus, showCharSelect, showEnd, showPause, showShop, showTitle } from './ui/menus';
@@ -61,6 +63,7 @@ async function boot(): Promise<void> {
 
   const atlas = await loadAtlas();
   renderer = makeWorldRenderer(atlas, isMobile);
+  renderer.skin = getSave().skin;
   renderer.initPlayerSprite();
   // GPU post stack (bloom/grade/chromatic/vignette) — ?fx=0 disables for A/B
   if (new URLSearchParams(location.search).get('fx') !== '0') {
@@ -226,9 +229,11 @@ function startRun(): void {
   run.onToast = (msg) => toast(msg, 1300);
   run.onEventToast = (msg, durS) => toast(msg, Math.min(3600, durS * 1000 + 900));
   renderer!.initRun(run.w);
+  // earned weapons join this run's draft pool
+  if (getSave().unlocks.includes('u_boomer')) run.w.unlockedWeapons.add('boomer');
   renderer!.onShake = (mag, dur) => camera.shake(mag, dur);
   renderer!.onHurtFlash = () => hurtFlash();
-  renderer!.onBossWarn = () => toast('⚠ BONZAR INCOMING ⚠', 2200);
+  renderer!.onBossWarn = (type) => toast(type === ENEMY.krusher ? '⚠ KRUSHER INCOMING ⚠' : '⚠ BONZAR INCOMING ⚠', 2200);
   // dev fast-forward: ?t=300 starts the run 5 minutes in; ?build=max equips a maxed loadout
   const devParams = new URLSearchParams(location.search);
   const headStart = Number(devParams.get('t') ?? 0);
@@ -289,7 +294,9 @@ function endRun(state: 'dead' | 'won', quit: boolean): void {
   run.bankedBonus = bonus;
   const total = w.runStats.goldEarned + Math.round(grant * w.stats.goldMult);
   addGold(total);
-  recordRun(t, w.runStats.kills, w.runStats.level, won);
+  recordRun(t, w.runStats.kills, w.runStats.level, won, w.descendLevel);
+  // the unlock cascade: this run's depth may have earned permanent content
+  const gained = grantDepthUnlocks(w.descendLevel).map((id) => unlockDef(id)?.name ?? id);
   phase = 'ended';
   audio.stopMusic();
   if (won) audio.win();
@@ -301,6 +308,7 @@ function endRun(state: 'dead' | 'won', quit: boolean): void {
     gold: total,
     goldTotal: getSave().gold,
     depth: w.descendLevel || undefined,
+    unlocked: gained,
     // retire-from-win offers the descent; a DESCEND death is final
   }, won && w.endState === 'won' ? { nextDepth: w.descendLevel + 1 } : undefined);
   void quit;

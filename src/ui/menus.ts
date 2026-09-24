@@ -1,8 +1,11 @@
 /** DOM menus: title, character select, shop, pause, end screens. */
 import { CHARACTERS } from '../game/data/characters';
 import { META_UPGRADES, metaCost } from '../game/data/metaShop';
-import { getSave, persist, selectCharacter, unlockCharacter, buyMetaRank } from '../save/save';
+import { DEPTH_UNLOCKS, SKINS, unlockDef } from '../game/data/unlocks';
+import { getSave, persist, selectCharacter, unlockCharacter, buyMetaRank, setSkin, skinUnlocked } from '../save/save';
 import { audio } from '../engine/audio';
+
+const depthOf = (unlockId: string | null): number => (unlockId ? unlockDef(unlockId)?.depth ?? 0 : 0);
 
 interface MenuHooks {
   onPlay(): void;
@@ -60,7 +63,7 @@ export function showTitle(): void {
       <button class="btn" id="m-shop">UPGRADES</button>
       <button class="btn" id="m-sfx">SFX: ${s.settings.sfx ? 'ON' : 'OFF'}</button>
     </div>
-    <div class="stat-line">BEST: ${fmtTime(s.best.time)} · ${s.best.kills} KILLS · LV ${s.best.level}${s.best.wins > 0 ? ` · ${s.best.wins} WIN${s.best.wins > 1 ? 'S' : ''}` : ''}</div>
+    <div class="stat-line">BEST: ${fmtTime(s.best.time)} · ${s.best.kills} KILLS · LV ${s.best.level}${s.best.wins > 0 ? ` · ${s.best.wins} WIN${s.best.wins > 1 ? 'S' : ''}` : ''}${s.best.depth > 0 ? ` · DEPTH ${s.best.depth}` : ''}</div>
     <div class="subtitle" style="opacity:0.7">WASD / ARROWS / TOUCH STICK · AUTO-ATTACKS FIRE THEMSELVES</div>`;
   el.querySelector('#m-play')!.addEventListener('click', () => { audio.click(); hooks?.onPlay(); });
   el.querySelector('#m-chars')!.addEventListener('click', () => { audio.click(); hooks?.onCharSelect(); });
@@ -88,12 +91,13 @@ export async function showCharSelect(): Promise<void> {
   const list = el.querySelector('#char-list')!;
   for (const c of CHARACTERS) {
     const unlocked = s.unlockedChars.includes(c.id);
+    const depthLocked = !unlocked && !!c.unlockDepth;
     const row = document.createElement('button');
     row.className = `char-row ${s.selectedChar === c.id ? 'selected' : ''} ${unlocked ? '' : 'locked'}`;
     row.innerHTML = `
       <canvas width="24" height="24" data-sprite="${c.sprite}"></canvas>
       <div class="info">
-        <b>${c.name}${unlocked ? '' : ` — 🔒 ${c.cost} 🪙`}</b>
+        <b>${c.name}${unlocked ? '' : depthLocked ? ` — ⚔ DEPTH ${c.unlockDepth}` : ` — 🔒 ${c.cost} 🪙`}</b>
         <small>${c.blurb}<br>${c.perk}</small>
       </div>`;
     row.addEventListener('click', () => {
@@ -102,6 +106,8 @@ export async function showCharSelect(): Promise<void> {
         selectCharacter(c.id);
         hooks?.refresh();
         void showCharSelect();
+      } else if (depthLocked) {
+        toastMsg(`REACH DESCEND DEPTH ${c.unlockDepth} TO UNLOCK ${c.name}`);
       } else if (unlockCharacter(c.id)) {
         audio.gold();
         selectCharacter(c.id);
@@ -112,6 +118,29 @@ export async function showCharSelect(): Promise<void> {
       }
     });
     list.appendChild(row);
+    // WRECKER skins: recolor swatches under the hero row
+    if (c.id === 'wrecker') {
+      const skinRow = document.createElement('div');
+      skinRow.className = 'skin-row';
+      for (const skin of SKINS) {
+        const open = skinUnlocked(skin.id);
+        const swatch = document.createElement('button');
+        swatch.className = `skin-swatch ${s.skin === skin.id ? 'selected' : ''} ${open ? '' : 'locked'}`;
+        swatch.innerHTML = `<canvas width="24" height="24" data-sprite="${skin.sprite}"></canvas><small>${open ? skin.name : `🔒 ${depthOf(skin.unlockId)}`}</small>`;
+        swatch.addEventListener('click', (e) => {
+          e.stopPropagation();
+          audio.click();
+          if (!open) {
+            toastMsg(`REACH DESCEND DEPTH ${depthOf(skin.unlockId)} TO UNLOCK`);
+            return;
+          }
+          setSkin(skin.id);
+          void showCharSelect();
+        });
+        skinRow.appendChild(swatch);
+      }
+      list.appendChild(skinRow);
+    }
   }
   el.querySelector('#c-back')!.addEventListener('click', () => { audio.click(); hooks?.onBack(); });
   // draw thumbnails from the atlas
@@ -182,6 +211,24 @@ export function showShop(): void {
     });
     list.appendChild(row);
   }
+  // depth milestones: the unlock cascade
+  const heading = document.createElement('div');
+  heading.className = 'shop-heading';
+  heading.textContent = `DEPTH MILESTONES — BEST ${s.best.depth}`;
+  list.appendChild(heading);
+  for (const def of DEPTH_UNLOCKS) {
+    const earned = s.unlocks.includes(def.id);
+    const row = document.createElement('div');
+    row.className = `shop-row milestone ${earned ? 'earned' : ''}`;
+    row.innerHTML = `
+      <span style="font-size:22px">${earned ? '✅' : '⚔'}</span>
+      <div class="info">
+        <b>${def.icon} ${def.name}</b>
+        <small>${def.desc}</small>
+      </div>
+      <span class="depth-tag">${earned ? 'EARNED' : `DEPTH ${def.depth}`}</span>`;
+    list.appendChild(row);
+  }
   el.querySelector('#s-back')!.addEventListener('click', () => { audio.click(); hooks?.onBack(); });
 }
 
@@ -203,17 +250,21 @@ export function showPause(): void {
 
 export function showEnd(
   won: boolean,
-  stats: { time: number; kills: number; level: number; gold: number; goldTotal: number; depth?: number },
+  stats: { time: number; kills: number; level: number; gold: number; goldTotal: number; depth?: number; unlocked?: string[] },
   descend?: { nextDepth: number },
 ): void {
   const el = show('end');
   const depthLine = stats.depth ? ` · DEPTH <b>${stats.depth}</b>` : '';
+  const unlockBanner = stats.unlocked && stats.unlocked.length > 0
+    ? `<div class="unlock-banner">🔓 NEW UNLOCK: <b>${stats.unlocked.join(' · ')}</b></div>`
+    : '';
   el.innerHTML = `
     <div class="title" style="color:${won ? 'var(--good)' : 'var(--danger)'}">${won ? 'ARENA CLEARED!' : stats.depth ? 'WRECKED IN THE DEPTHS' : 'WRECKED'}</div>
     <div class="stat-line">
       SURVIVED <b>${fmtTime(stats.time)}</b>${depthLine} · KILLS <b>${stats.kills}</b> · LEVEL <b>${stats.level}</b><br>
       GOLD COLLECTED <b>🪙 ${stats.gold}</b> · TOTAL <b>🪙 ${stats.goldTotal}</b>
     </div>
+    ${unlockBanner}
     <div class="menu-col">
       ${descend ? `<button class="btn primary" id="e-descend">⚔ DESCEND — DEPTH ${descend.nextDepth}</button>` : ''}
       <button class="btn ${descend ? '' : 'primary'}" id="e-retry">↻ RUN IT AGAIN</button>

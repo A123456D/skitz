@@ -129,7 +129,10 @@ export function updateHud(run: Run): void {
   }
   els.slots.innerHTML = html;
 
-  const bossIdx = Array.prototype.lastIndexOf.call(w.etype.subarray(0, w.eCount), ENEMY.boss);
+  let bossIdx = -1;
+  for (let i = w.eCount - 1; i >= 0; i--) {
+    if (ENEMY_DEFS[w.etype[i]].boss) { bossIdx = i; break; }
+  }
   if (w.bossAlive && bossIdx >= 0) {
     els.bossBar.classList.remove('hidden');
     els.bossFill.style.width = `${Math.max(0, (w.ehp[bossIdx] / w.emaxhp[bossIdx]) * 100)}%`;

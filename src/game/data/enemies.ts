@@ -9,6 +9,7 @@ export const ENEMY = {
   splitter: 5,
   splitterHalf: 6,
   boss: 7,
+  krusher: 8,
 } as const;
 
 export type EnemyId = (typeof ENEMY)[keyof typeof ENEMY];
@@ -73,6 +74,11 @@ export const ENEMY_DEFS: Record<number, EnemyDef> = {
   [ENEMY.boss]: {
     id: 7, name: 'BONZAR', sprite: 'boss', hp: 2400, speed: 30, radius: 17, mass: 14, contactDmg: 26, xp: 120, knockMult: 0.06,
     attack: { kind: 'charge', cd: 5.5, range: 420, windup: 0.8, power: 640 },
+    boss: true,
+  },
+  [ENEMY.krusher]: {
+    id: 8, name: 'KRUSHER', sprite: 'boss_krusher', hp: 2200, speed: 36, radius: 16, mass: 12, contactDmg: 22, xp: 130, knockMult: 0.07,
+    attack: { kind: 'pound', cd: 3.6, range: 170, windup: 0.6, power: 150, dmg: 20 },
     boss: true,
   },
 };

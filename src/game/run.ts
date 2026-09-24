@@ -276,10 +276,10 @@ export class Run {
       gemPickup: () => {
         audio.gem();
       },
-      bossSpawn: (x, y) => {
+      bossSpawn: (x, y, type) => {
         audio.boss();
         this.fx?.shake(14, 0.8);
-        this.fx?.bossWarn(x, y);
+        this.fx?.bossWarn(x, y, type);
       },
       playerAttack: (kind) => {
         this.fx?.playerAttackFx(kind);
@@ -365,12 +365,12 @@ export class Run {
         audio.thud();
         this.fx?.shake(3, 0.12);
       },
-      bossEnrage: (x, y) => {
+      bossEnrage: (x, y, type) => {
         audio.roar();
         this.fx?.bossEnrageFx(x, y);
         this.fx?.shake(14, 0.7);
         this.fx?.screenImpact(0.85);
-        this.onToast?.('BONZAR IS FURIOUS!');
+        this.onToast?.(type === ENEMY.krusher ? 'KRUSHER CALLS THE PIT!' : 'BONZAR IS FURIOUS!');
       },
     };
   }
@@ -396,7 +396,7 @@ export interface FxSink {
   shake(mag: number, dur: number): void;
   hurtFlash(): void;
   goldBurst(x: number, y: number): void;
-  bossWarn(x: number, y: number): void;
+  bossWarn(x: number, y: number, type: number): void;
   playerAttackFx(kind: 'slam' | 'shot' | 'dash'): void;
   telegraph(x: number, y: number, kind: AttackKind): void;
   eruptionFx(x: number, y: number, radius: number): void;

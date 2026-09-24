@@ -27,6 +27,40 @@ color, comedy, and personality. Moody edges, playful center — never grim.
 - Death language: enemies burst into particles + shards; small enemies occasionally pop a
   rising little ghost (comedy, Megabonk-style).
 
+## Art bible v2 (pass 10 — the authorship pass)
+
+The engine is not the bottleneck; authorship is. V2 commits to executing the existing
+identity properly. Same style name, deeper everything.
+
+- **Terrain is material, not tint.** Each biome gets generated ground with real material
+  story (iron: cracked steel plates + rivets + seams; frost: packed snow, ice cracks,
+  drifts; rust: rusted grating, oil stains, junk decals; ember: scorched basalt + glowing
+  lava veins). Base tile + scattered decal sprites, seeded per run. Per-biome tints stay
+  as a secondary grade over authored neutral textures, never the only source of identity.
+- **Lighting language.** Ambient darkness is the default; light is *earned* and *pooled*:
+  lamps, glowcracks, lava veins, bumpers, shrines and the boss arena pool soft colored
+  light on the ground (additive falloff discs, not flat circles). Every standing structure
+  (walls, terraces, pillars, crates) gets baked contact AO at its base and a directional
+  cast shadow. Key light = one source per biome (moon / foundry glow / low sun / forge
+  glare) drawn in the sky. Bloom stays earned: pools, windows, veins, gems, bright FX.
+- **Backdrop is a place.** Rect silhouettes are dead. Per-biome generated skyline strips
+  (iron: gantries + chimneys; frost: glaciers + foundry stacks; rust: junk heaps + cranes;
+  ember: furnace silos + volcano cones) at the same 3 parallax depths, windows lit in
+  biome windowColor, far layers pushed back by tint (atmospheric perspective).
+- **Actors are silhouettes first.** Every enemy class gets silhouette hardware that reads
+  at gameplay size in a pile: Imp horns + spikes, Spitter barrel mouth, Exploder fuse +
+  crack lines, Splitter seam, Tank plates + treads; Swarmie stays the smooth baseline
+  mook so the contrast reads. Each gets 2 idle frames (breathe) + windup + action frame;
+  squash/stretch stays layered on top. Uniqueness diff (silhouette + accent + motion)
+  re-run for every entity after any change.
+- **UI is pixel, not emoji.** All HUD/menu icons are generated pixel sprites (coin, skull,
+  heart, chest, bolt, gem, timer, reroll/banish/lock glyphs) served as a sprite sheet with
+  CSS classes; the retro-terminal bones of the UI stay.
+- **Density target:** Halls of Torment ground clutter density — decals, debris, stains and
+  wreck marks make the floor tell the story of the fights that happened there (scorch
+  craters fade over ~20s after big impacts).
+
+
 ## Ball rig bible (pass 8)
 
 - **The ball wears its build.** The hero is WRECKER: a construction-yellow wrecking ball
@@ -67,6 +101,9 @@ zone. Master bus: SFX + music through a compressor (chaos must not clip).
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-09-24 | Pass 10 art overhaul approved: keep Pixi engine, no rewrite; strike visuals before content depth | Explore audit: engine outguns Brotato's; ~70% of screen pixels (floor+backdrop) are least-authored; user priority is "look like a real indie title" |
+| 2026-09-24 | Terrain = authored per-biome textures + decals (not multiply tints over one gray tile); lighting = pooled additive + baked AO + cast shadows (no render-texture lightmap) | Biggest pixel win per unit of risk; a true lightmap multiply pass is high-risk on the dual-backend WebGPU/GLSL setup and the visual goal (pools + falloff + AO) is achievable without it |
+| 2026-09-24 | `docs/GAME-BRIEF.md` added as the portable game explanation (user asked for a paste-ready ChatGPT brief) | Doubles as pitch doc; DESIGN.md stays the internal bible |
 | 2026-09-24 | Pass C events are a single-slot director (one event at a time, 50-78s gaps, armed at 1:10) | Overlapping events would be unreadable chaos; gaps keep events feeling like moments, not weather |
 | 2026-09-24 | Event damage modifiers live at the `damageEnemy` choke point (`evDmgMult`), cooldown boost at the single cd use site (`evCdBoost`) | Two fields beat 20 call-site patches; refreshStats can never wipe a mid-event buff |
 | 2026-09-24 | BONZAR phase 2 triggers at ≤50% hp inside `damageEnemy` (not a timer) | Drama ties to the player's own progress — you PUSHED him over the edge |
@@ -86,6 +123,29 @@ zone. Master bus: SFX + music through a compressor (chaos must not clip).
 | 2026-09-23 | Pass order A → B → D → C | A fastest perceived-quality win; B fixes #1 gameplay gap; D builds on A's atmosphere; C (endgame/events) needs B+D content to draw from |
 | 2026-09-23 | GameLoop watchdog: a 100ms setInterval drives a frame whenever rAF stalls >500ms (occluded webviews throttle rAF to zero) | Discovered during QA: embedded/occluded browser killed rAF entirely, freezing the sim with zero errors; watchdog keeps unattended QA and background tabs alive at throttled speed, inert during normal play |
 | 2026-09-23 | `window.__wb` dev introspection hook (app/renderer/post/camera/loop/audio/run/phase) | Live scene-graph + state probing from page console made every QA bisect exact instead of guesswork |
+| 2026-09-24 | Pass 10: content unlocks are DEPTH-gated (achievements), never gold | Endless mode needed stakes; gold is already a currency — depth is the new scoreboard. Cascade lives in `data/unlocks.ts` + `save.grantDepthUnlocks`, evaluated once at run end |
+| 2026-09-24 | KRUSHER takes even depths (BONZAR odd), enrages by SUMMONING instead of shrapnel | Same-phase differentiation with one data-driven branch; summons feed the bonk chains BONZAR's ring doesn't |
+| 2026-09-24 | Wreckang = bkind 2 bolt with out/return phases + per-enemy iframes (eorbIframe reuse) | True boomerang arc beats retarget-bounce; pierce-both-directions is the weapon's identity |
+
+## Pass 10 verification log (2026-09-24) — Unlock Cascade + KRUSHER + Wreckang + VOLT
+
+- 146 vitest tests green (15 new: save v1→v2 migration, cascade grant/no-regrant, skin
+  gating, draft gating (boomer absent until earned / base six always), KRUSHER depth-2
+  parity + summon-enrage (imps+exploders, no shrapnel), boomerang out-and-back catch +
+  double-hit pierce), `tsc` clean.
+- Live: seeded-save flow (title shows DEPTH 3), char select shows VOLT unlocked + 3 skin
+  swatches (EMBER selected, VOID 🔒4), VOLT in-game (cyan tesla ball, coil + wing rig
+  parts), boomerang volley fired (bkind 2, wing spins while airborne), depth-2 KRUSHER
+  summoned via spawner parity — enrage at 50% summoned pit children, `.bar.enraged` pulsed
+  on the (now boss-generic) HUD bar; DESCEND death end screen = "WRECKED IN THE DEPTHS"
+  with no descend offer. Zero console errors.
+- Environment gotcha: sibling sessions created `crucible/` + `feral/` in the shared
+  workspace → their file churn force-reloaded the dev server mid-verification (evaluate
+  hangs). Fixed: added them to vite watch.ignored + restarted. One tab wedged from the
+  restart race — not a code bug.
+- Fixed during verify: HUD boss bar scanned for BONZAR's type id only → now any
+  `ENEMY_DEFS[].boss`; `bossSpawn`/`bossEnrage` events carry the boss type for per-boss
+  warn toasts/ring colors.
 
 ## Pass 9 verification log (2026-09-24) — Run & Endgame
 

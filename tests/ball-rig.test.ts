@@ -19,7 +19,7 @@ const inAtlas = (name: string | undefined): boolean => !!name && name in atlasFr
 
 describe('ball rig visualization gate', () => {
   it('every weapon mounts an attachment with a valid slot and atlas sprite', () => {
-    const slots = new Set(['band', 'hoop', 'aim', 'back', 'top', 'low']);
+    const slots = new Set(['band', 'hoop', 'aim', 'back', 'top', 'low', 'wing']);
     for (const id of Object.keys(WEAPONS) as Array<keyof typeof WEAPONS>) {
       const att = WEAPON_ATTACHMENT[id];
       expect(att, `weapon ${id} has no attachment`).toBeDefined();

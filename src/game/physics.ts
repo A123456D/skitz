@@ -719,12 +719,12 @@ export function damageEnemy(w: World, i: number, dmg: number, knock: number, kno
 const BOSS_ENRAGE_SPEED = 1.45;
 const BOSS_ENRAGE_CHARGE = 1.3;
 
-/** BONZAR phase 2: shockwave + shrapnel ring + faster everything. */
+/** Boss phase 2: shockwave + a type-specific mean streak. */
 function enrageBoss(w: World, i: number, ev: Events): void {
   w.bossEnraged = true;
   const x = w.ex[i];
   const y = w.ey[i];
-  ev.bossEnrage(x, y);
+  ev.bossEnrage(x, y, w.etype[i]);
   // shove everything outward — the arena takes a step back
   w.hash.queryCircle(x, y, 320, (j) => {
     if (j >= w.eCount || j === i) return true;
@@ -742,10 +742,24 @@ function enrageBoss(w: World, i: number, ev: Events): void {
     w.pvx += (pdx / pd) * 380;
     w.pvy += (pdy / pd) * 380;
   }
-  // shrapnel ring
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    w.spawnEnemyBullet(x + Math.cos(a) * 18, y + Math.sin(a) * 18, Math.cos(a) * 150, Math.sin(a) * 150, 10);
+  if (w.etype[i] === ENEMY.krusher) {
+    // KRUSHER calls the pit: summons depth-scaled children in a ring
+    const hs = 1 + w.runStats.time / 900;
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      const type = k % 2 === 0 ? ENEMY.imp : ENEMY.exploder;
+      const ni = w.spawnEnemy(type, x + Math.cos(a) * 70, y + Math.sin(a) * 70, false, hs);
+      if (ni >= 0) {
+        w.evx[ni] = Math.cos(a) * 140;
+        w.evy[ni] = Math.sin(a) * 140;
+      }
+    }
+  } else {
+    // BONZAR: shrapnel ring
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      w.spawnEnemyBullet(x + Math.cos(a) * 18, y + Math.sin(a) * 18, Math.cos(a) * 150, Math.sin(a) * 150, 10);
+    }
   }
   w.evx[i] += (w.px - x) / pd * 120;
   w.evy[i] += (w.py - y) / pd * 120;
@@ -753,7 +767,7 @@ function enrageBoss(w: World, i: number, ev: Events): void {
 
 /** true while this enemy is an enraged boss (movement/attack scaling). */
 export function bossEnrageSpeedMult(w: World, i: number): number {
-  return w.etype[i] === ENEMY.boss && w.bossEnraged ? BOSS_ENRAGE_SPEED : 1;
+  return ENEMY_DEFS[w.etype[i]].boss && w.bossEnraged ? BOSS_ENRAGE_SPEED : 1;
 }
 
 export function killEnemyByIndex(w: World, i: number, ev: Events): void {

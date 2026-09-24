@@ -7,7 +7,7 @@ import type { PassiveId, WeaponId } from './weapons';
 import { EVOLUTIONS } from './evolutions';
 
 /** Mount points on the rig (rig-local px offsets from ball center are in render/ballRig.ts). */
-export type Slot = 'band' | 'hoop' | 'aim' | 'back' | 'top' | 'low';
+export type Slot = 'band' | 'hoop' | 'aim' | 'back' | 'top' | 'low' | 'wing';
 
 export interface WeaponAttachment {
   sprite: string;
@@ -25,6 +25,7 @@ export const WEAPON_ATTACHMENT: Record<WeaponId, WeaponAttachment> = {
   dash: { sprite: 'att_rocket', evoSprite: 'att_rocket_jg', slot: 'back', tint: 0xff5470 },
   trail: { sprite: 'att_cell', evoSprite: 'att_cell_tw', slot: 'low', tint: 0x4de1ff },
   chain: { sprite: 'att_coil', evoSprite: 'att_coil_sc', slot: 'top', tint: 0x8fb7ff },
+  boomer: { sprite: 'att_rang', evoSprite: 'att_rang_dr', slot: 'wing', tint: 0x7ee0ff },
 };
 
 /** evolution id -> evolved attachment sprite override (must match evoSprite). */

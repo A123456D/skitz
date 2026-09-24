@@ -13,7 +13,7 @@ export interface Events {
   levelUp(): void;
   goldPickup(value: number): void;
   gemPickup(): void;
-  bossSpawn(x: number, y: number): void;
+  bossSpawn(x: number, y: number, type: number): void;
   /** the player's weapon fired — drives per-weapon player animation */
   playerAttack(kind: 'slam' | 'shot' | 'dash'): void;
   /** an enemy began winding up a special attack — telegraph fx + audio */
@@ -54,6 +54,6 @@ export interface Events {
   tremor(x: number, y: number, radius: number): void;
   /** METEOR SHOWER: a meteor detonated at x,y (lighter than a full explosion) */
   meteor(x: number, y: number, radius: number): void;
-  /** BONZAR dropped below half hp: phase 2 begins */
-  bossEnrage(x: number, y: number): void;
+  /** a boss dropped below half hp: phase 2 begins (type: ENEMY id) */
+  bossEnrage(x: number, y: number, type: number): void;
 }

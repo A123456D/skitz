@@ -127,6 +127,43 @@ function fire(w: World, id: WeaponId, L: WeaponLevel, ev: Events): void {
       }
       break;
     }
+    case 'boomer': {
+      const count = L.count ?? 1;
+      const doom = w.evolved.has('boomer');
+      const targets = nearestEnemies(w, w.px, w.py, count + 1, 620);
+      for (let c = 0; c < count; c++) {
+        const t = targets.length > 0 ? targets[c % targets.length] : -1;
+        let ax: number;
+        let ay: number;
+        if (t >= 0) {
+          const dx = w.ex[t] - w.px;
+          const dy = w.ey[t] - w.py;
+          const d = Math.hypot(dx, dy) || 1;
+          ax = dx / d;
+          ay = dy / d;
+        } else {
+          ax = w.facingX;
+          ay = w.facingY;
+        }
+        const spread = (c - (count - 1) / 2) * 0.55;
+        const cos = Math.cos(spread);
+        const sin = Math.sin(spread);
+        const rx = ax * cos - ay * sin;
+        const ry = ax * sin + ay * cos;
+        const sp = (L.speed ?? 380) * (doom ? 1.1 : 1);
+        w.spawnBolt(
+          w.px + rx * 8, w.py + ry * 8,
+          rx * sp, ry * sp,
+          L.dmg * s.dmgMult * (doom ? 1.3 : 1),
+          L.knock * s.knockMult,
+          99, // boomerangs never die to bounce logic — they fly out and return
+          2,
+          (doom ? 2.6 : 2.2) + c * 0.15,
+        );
+      }
+      ev.playerAttack('shot');
+      break;
+    }
     default:
       break;
   }
@@ -270,65 +307,112 @@ export function trailNodesForRender(): TrailNode[] {
   return trailNodes;
 }
 
+const BOOMER_OUT_T = 0.55;   // seconds flying outward before the return arc
+const BOOMER_DECEL = 700;    // px/s^2 outward deceleration
+const BOOMER_RETURN_ACC = 1500;
+const BOOMER_RETURN_CAP = 540;
+
 function stepBolts(w: World, dt: number, ev: Events): void {
   const pinball = w.evolved.has('shot');
+  const doom = w.evolved.has('boomer');
   for (let i = 0; i < w.bCount; i++) {
+    // boomerangs fly their own arc: decelerate outward, then home back to the thrower
+    if (w.bkind[i] === 2) {
+      w.bphase[i] += dt;
+      const sp = Math.hypot(w.bvx[i], w.bvy[i]) || 1;
+      if (w.bphase[i] < BOOMER_OUT_T) {
+        const ns = Math.max(120, sp - BOOMER_DECEL * dt);
+        w.bvx[i] *= ns / sp;
+        w.bvy[i] *= ns / sp;
+      } else {
+        const dx = w.px - w.bx[i];
+        const dy = w.py - w.by[i];
+        const d = Math.hypot(dx, dy) || 1;
+        const ns = Math.min(doom ? 620 : BOOMER_RETURN_CAP, sp + BOOMER_RETURN_ACC * dt);
+        w.bvx[i] = (dx / d) * ns;
+        w.bvy[i] = (dy / d) * ns;
+        if (d < 16) { // caught
+          w.removeBolt(i);
+          i--;
+          continue;
+        }
+      }
+    }
+
     w.bx[i] += w.bvx[i] * dt;
     w.by[i] += w.bvy[i] * dt;
     w.blife[i] -= dt;
 
     let consumed = false;
-    const hit = w.hash.queryCircleFind(w.bx[i], w.by[i], 14, (j) => {
-      const dx = w.ex[j] - w.bx[i];
-      const dy = w.ey[j] - w.by[i];
-      const rr = 5 + w.eradius[j];
-      return dx * dx + dy * dy <= rr * rr;
-    });
-    if (hit >= 0) {
-      const bounces = w.bbounces[i];
-      const isSaw = w.bkind[i] === 1;
-      damageEnemy(w, hit, w.bdmg[i], w.bknock[i], Math.atan2(w.bvy[i], w.bvx[i]), ev, false);
-      if (pinball && !isSaw) {
-        // Pinball Storm: never dies on a hit — accelerate and retarget
-        const sp = Math.min(620, (Math.hypot(w.bvx[i], w.bvy[i]) || 300) * 1.05);
-        const next = nearestEnemies(w, w.bx[i], w.by[i], 1, 300, hit);
-        let ax: number;
-        let ay: number;
-        if (next.length > 0) {
-          const t = next[0];
-          const dx = w.ex[t] - w.bx[i];
-          const dy = w.ey[t] - w.by[i];
-          const d = Math.hypot(dx, dy) || 1;
-          ax = dx / d;
-          ay = dy / d;
+    if (w.bkind[i] === 2) {
+      // boomerangs pierce: per-enemy iframe gates rehits, return pass hits again
+      const hits: number[] = [];
+      w.hash.queryCircle(w.bx[i], w.by[i], 14, (j) => {
+        if (w.eorbIframe[j] > 0) return true;
+        const dx = w.ex[j] - w.bx[i];
+        const dy = w.ey[j] - w.by[i];
+        const rr = 5 + w.eradius[j];
+        if (dx * dx + dy * dy <= rr * rr) hits.push(j);
+        return true;
+      });
+      for (const j of hits) {
+        if (j >= w.eCount || w.eorbIframe[j] > 0) continue; // a kill swapped the pool
+        w.eorbIframe[j] = 0.45;
+        damageEnemy(w, j, w.bdmg[i], w.bknock[i], Math.atan2(w.bvy[i], w.bvx[i]), ev, false);
+      }
+    } else {
+      const hit = w.hash.queryCircleFind(w.bx[i], w.by[i], 14, (j) => {
+        const dx = w.ex[j] - w.bx[i];
+        const dy = w.ey[j] - w.by[i];
+        const rr = 5 + w.eradius[j];
+        return dx * dx + dy * dy <= rr * rr;
+      });
+      if (hit >= 0) {
+        const bounces = w.bbounces[i];
+        const isSaw = w.bkind[i] === 1;
+        damageEnemy(w, hit, w.bdmg[i], w.bknock[i], Math.atan2(w.bvy[i], w.bvx[i]), ev, false);
+        if (pinball && !isSaw) {
+          // Pinball Storm: never dies on a hit — accelerate and retarget
+          const sp = Math.min(620, (Math.hypot(w.bvx[i], w.bvy[i]) || 300) * 1.05);
+          const next = nearestEnemies(w, w.bx[i], w.by[i], 1, 300, hit);
+          let ax: number;
+          let ay: number;
+          if (next.length > 0) {
+            const t = next[0];
+            const dx = w.ex[t] - w.bx[i];
+            const dy = w.ey[t] - w.by[i];
+            const d = Math.hypot(dx, dy) || 1;
+            ax = dx / d;
+            ay = dy / d;
+          } else {
+            const a = w.rng.angle();
+            ax = Math.cos(a);
+            ay = Math.sin(a);
+          }
+          w.bvx[i] = ax * sp;
+          w.bvy[i] = ay * sp;
+          w.blife[i] = Math.max(w.blife[i], 1.2);
+        } else if (bounces > 0) {
+          const next = nearestEnemies(w, w.bx[i], w.by[i], 1, 260, hit);
+          const sp = Math.hypot(w.bvx[i], w.bvy[i]) || 300;
+          if (next.length > 0) {
+            const t = next[0];
+            const dx = w.ex[t] - w.bx[i];
+            const dy = w.ey[t] - w.by[i];
+            const d = Math.hypot(dx, dy) || 1;
+            w.bvx[i] = (dx / d) * sp;
+            w.bvy[i] = (dy / d) * sp;
+            w.blife[i] = Math.max(w.blife[i], 0.8);
+          } else {
+            const a = w.rng.angle();
+            w.bvx[i] = Math.cos(a) * sp;
+            w.bvy[i] = Math.sin(a) * sp;
+            w.blife[i] = Math.max(w.blife[i], 0.5);
+          }
+          w.bbounces[i] = bounces - 1;
         } else {
-          const a = w.rng.angle();
-          ax = Math.cos(a);
-          ay = Math.sin(a);
+          consumed = true;
         }
-        w.bvx[i] = ax * sp;
-        w.bvy[i] = ay * sp;
-        w.blife[i] = Math.max(w.blife[i], 1.2);
-      } else if (bounces > 0) {
-        const next = nearestEnemies(w, w.bx[i], w.by[i], 1, 260, hit);
-        const sp = Math.hypot(w.bvx[i], w.bvy[i]) || 300;
-        if (next.length > 0) {
-          const t = next[0];
-          const dx = w.ex[t] - w.bx[i];
-          const dy = w.ey[t] - w.by[i];
-          const d = Math.hypot(dx, dy) || 1;
-          w.bvx[i] = (dx / d) * sp;
-          w.bvy[i] = (dy / d) * sp;
-          w.blife[i] = Math.max(w.blife[i], 0.8);
-        } else {
-          const a = w.rng.angle();
-          w.bvx[i] = Math.cos(a) * sp;
-          w.bvy[i] = Math.sin(a) * sp;
-          w.blife[i] = Math.max(w.blife[i], 0.5);
-        }
-        w.bbounces[i] = bounces - 1;
-      } else {
-        consumed = true;
       }
     }
 

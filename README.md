@@ -90,6 +90,17 @@ end-of-run bonus buys permanent upgrades and unlocks two more balls.
 Charged enemies (hit by Slam/Trail/Chain) deal impact damage to anything they
 crash into — chain the knockback for screen-clearing combos.
 
+## Unlock cascade (pass 10)
+
+- **DESCEND earns permanent content.** Depth milestones (see UPGRADES → Depth
+  Milestones): depth 1 → 🔥 Ember skin, **depth 2 → ⚡ VOLT ball** (live-wire
+  chain-start), **depth 3 → 🪃 Wreckang** (new weapon: boomerangs that pierce
+  the horde out AND back; pairs with Vitality into **Doomrangs**), depth 4 →
+  🌑 Void skin. Skins recolor the hero ball from the character screen.
+- **KRUSHER, the pit's drill guardian** — even-depth DESCEND bosses are a new
+  beast: a hazard-striped drill dome that pounds shockwaves and, at half HP,
+  **summons the pit's children** instead of BONZAR's shrapnel ring.
+
 ## Run & endgame (pass 9)
 
 - **Run events** — after 1:10 the world throws moments at you every ~1 minute:

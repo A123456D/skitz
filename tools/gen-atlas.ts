@@ -131,23 +131,52 @@ interface SpriteDef {
 const sprites: SpriteDef[] = [];
 const def = (name: string, w: number, h: number, draw: (p: Px) => void) => sprites.push({ name, w, h, draw });
 
-// ---------- playable balls (wrecker is 20x20 to match its 9px sim radius) ----------
+// ---------- playable balls (wrecker family is 20x20 to match its 9px sim radius) ----------
 
-def('ball_wrecker', 20, 20, (p) => {
-  // construction-yellow wrecking ball, light from top-left, cool amber shadow
-  p.sphere(10, 10, 9.3, [247, 197, 46], [148, 96, 14], [255, 242, 176]);
-  // steel shackle cap on top
-  p.sphere(10, 4, 2.6, [150, 160, 195], [70, 76, 120], [225, 232, 252]);
+interface BallPal { base: RGB; dark: RGB; light: RGB; capA: RGB; capB: RGB; capC: RGB }
+
+const WRECKER_PAL: BallPal = { base: [247, 197, 46], dark: [148, 96, 14], light: [255, 242, 176], capA: [150, 160, 195], capB: [70, 76, 120], capC: [225, 232, 252] };
+const EMBER_PAL: BallPal = { base: [255, 122, 56], dark: [148, 44, 12], light: [255, 214, 160], capA: [120, 96, 96], capB: [58, 44, 48], capC: [235, 210, 205] };
+const VOID_PAL: BallPal = { base: [118, 88, 190], dark: [44, 28, 88], light: [198, 172, 255], capA: [86, 92, 140], capB: [36, 40, 72], capC: [188, 196, 240] };
+
+function drawWrecker(p: Px, c: BallPal): void {
+  // heavy ball, light from top-left, cool shadow
+  p.sphere(10, 10, 9.3, c.base, c.dark, c.light);
+  // shackle cap on top
+  p.sphere(10, 4, 2.6, c.capA, c.capB, c.capC);
   p.set(10, 2, [40, 44, 74]);
-  // rivets around the cap
   const riv: RGB = [110, 70, 10];
   for (const [x, y] of [[6, 7], [14, 7], [4, 12], [16, 12]] as const) p.set(x, y, riv);
-  // heavy under-shade for mass
   for (let x = 5; x <= 15; x++) {
     for (let y = 16; y <= 18; y++) {
       const dx = x + 0.5 - 10;
       const dy = y + 0.5 - 10;
-      if (dx * dx + dy * dy < 81) p.set(x, y, [172, 116, 22]);
+      if (dx * dx + dy * dy < 81) p.set(x, y, [Math.round(c.dark[0] * 1.16), Math.round(c.dark[1] * 1.2), Math.round(c.dark[2] * 1.4)]);
+    }
+  }
+}
+
+def('ball_wrecker', 20, 20, (p) => drawWrecker(p, WRECKER_PAL));
+def('ball_wrecker_ember', 20, 20, (p) => drawWrecker(p, EMBER_PAL));
+def('ball_wrecker_void', 20, 20, (p) => drawWrecker(p, VOID_PAL));
+
+/** VOLT — smooth cyan live-wire ball with a tesla nub and a zigzag charge. */
+def('ball_volt', 20, 20, (p) => {
+  p.sphere(10, 10, 9.3, [96, 222, 255], [18, 104, 158], [226, 252, 255]);
+  // tesla nub on top
+  p.sphere(10, 3.6, 2.2, [214, 132, 58], [132, 72, 26], [255, 220, 160]);
+  p.set(10, 1, [255, 255, 220]);
+  // electric zigzag decal
+  const zap: RGB = [240, 255, 255], zapD: RGB = [130, 210, 250];
+  p.set(7, 8, zapD); p.set(8, 7, zap); p.set(9, 8, zap); p.set(10, 7, zap);
+  p.set(11, 8, zap); p.set(12, 7, zapD); p.set(13, 8, zapD);
+  p.set(6, 13, zapD); p.set(7, 12, zap); p.set(8, 13, zap);
+  // under-shade
+  for (let x = 5; x <= 15; x++) {
+    for (let y = 16; y <= 18; y++) {
+      const dx = x + 0.5 - 10;
+      const dy = y + 0.5 - 10;
+      if (dx * dx + dy * dy < 81) p.set(x, y, [24, 128, 182]);
     }
   }
 });
@@ -352,6 +381,43 @@ def('att_flame', 10, 6, (p) => {
   p.set(9, 2, mid); p.set(9, 3, mid);
 });
 
+/** Wreckang — boomerang rack mounted on the ball's shoulder (points up-left). */
+def('att_rang', 12, 11, (p) => {
+  const steel: RGB = [176, 196, 232], steelD: RGB = [70, 80, 120], stripe: RGB = [96, 222, 255];
+  // V boomerang, arms up
+  for (let i = 0; i < 7; i++) {
+    p.set(2 + i, 8 - i, i < 5 ? steel : steelD);      // left arm rising
+    p.set(9 - i, 8 - i, i < 5 ? steel : steelD);      // right arm rising
+  }
+  for (let i = 0; i < 3; i++) { p.set(4 + i, 4 - 0 - 0, stripe); p.set(7 - i, 4, stripe); }
+  // mount pad
+  p.set(5, 9, steelD); p.set(6, 9, steelD); p.set(5, 10, steelD); p.set(6, 10, steelD);
+});
+
+/** Doomrangs — twin violet boomerangs on the rack. */
+def('att_rang_dr', 12, 11, (p) => {
+  const vio: RGB = [186, 120, 250], vioD: RGB = [92, 52, 158], stripe: RGB = [255, 170, 255];
+  for (let i = 0; i < 7; i++) {
+    p.set(2 + i, 8 - i, i < 5 ? vio : vioD);
+    p.set(9 - i, 8 - i, i < 5 ? vio : vioD);
+    p.set(4 + i, 10 - i, i < 4 ? vioD : vio); // second, offset rang
+  }
+  p.set(5, 3, stripe); p.set(6, 3, stripe);
+  p.set(5, 9, vioD); p.set(6, 9, vioD); p.set(5, 10, vioD); p.set(6, 10, vioD);
+});
+
+/** Flying boomerang projectile — chunky chevron, spins in-engine. Tintable. */
+def('rang_bolt', 11, 11, (p) => {
+  const steel: RGB = [210, 224, 248], steelD: RGB = [70, 80, 120], tip: RGB = [255, 255, 255];
+  for (let i = 0; i < 5; i++) {
+    p.set(1 + i, 8 - i, steel);
+    p.set(9 - i, 8 - i, steel);
+  }
+  p.set(0, 9, steelD); p.set(1, 9, steelD); p.set(9, 9, steelD); p.set(10, 9, steelD);
+  p.set(5, 3, tip); p.set(4, 4, steelD); p.set(6, 4, steelD);
+  p.set(2, 6, steelD); p.set(8, 6, steelD);
+});
+
 // ---------- passive charms (7x7 trinkets hung on the ball) ----------
 
 def('charm_mass', 7, 7, (p) => {
@@ -482,6 +548,37 @@ def('boss', 32, 32, (p) => {
   const maw: RGB = [50, 8, 18];
   for (let x = 11; x <= 20; x++) { p.set(x, 24, maw); p.set(x, 25, maw); }
   for (const x of [12, 15, 18]) p.set(x, 24, WHITE);
+});
+
+/** KRUSHER — the pit's drill guardian. Angular steel wedge vs BONZAR's round maw. */
+def('boss_krusher', 32, 32, (p) => {
+  const shell: RGB = [126, 136, 178], shellD: RGB = [48, 54, 88], shellL: RGB = [208, 216, 244];
+  const haz: RGB = [255, 190, 40], hazD: RGB = [180, 120, 16];
+  // big drill horn: wide base tapering to a hot tip, segmented
+  for (let i = 0; i < 13; i++) {
+    const half = Math.max(0, Math.round(6 - (i * 6) / 12));
+    for (let x = 16 - half; x <= 16 + half; x++) p.set(x, 10 - i, i % 3 === 0 ? shellD : shellL);
+  }
+  p.set(16, 0, [255, 240, 200]); p.set(15, 1, haz); p.set(16, 1, haz); p.set(17, 1, haz);
+  // heavy dome shell
+  p.sphere(16, 21, 11.5, shell, shellD, shellL);
+  // hazard chevron band
+  for (let x = 6; x <= 25; x++) {
+    const yy = 19 + Math.round(Math.abs(x - 15.5) / 2.4);
+    p.set(x, yy, (x % 4 < 2) ? haz : hazD);
+    p.set(x, yy + 1, (x % 4 < 2) ? hazD : haz);
+  }
+  // glowing slit eyes under the drill base
+  const eye: RGB = [255, 96, 64], glow: RGB = [255, 200, 110];
+  p.rect(8, 14, 5, 2, eye); p.rect(19, 14, 5, 2, eye);
+  p.set(9, 14, glow); p.set(20, 14, glow);
+  // brow ridge
+  for (let x = 7; x <= 12; x++) p.set(x, 13, shellD);
+  for (let x = 19; x <= 24; x++) p.set(x, 13, shellD);
+  // treads: wide stubby feet
+  for (const [x0, y0] of [[3, 30], [21, 30]] as const) {
+    for (let x = x0; x < x0 + 8; x++) { p.set(x, y0, shellD); p.set(x, y0 + 1, [26, 30, 50]); }
+  }
 });
 
 // ---------- projectiles / pickups / fx ----------

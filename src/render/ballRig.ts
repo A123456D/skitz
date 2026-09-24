@@ -24,6 +24,7 @@ export class BallRig extends Container {
   private flame: Sprite;
   private coil: Sprite;
   private cell: Sprite;
+  private wing: Sprite;
   private charms: Sprite[] = [];
   /** per-part level scale, set by rebuild() and combined with per-frame anim in sync() */
   private partScale = new Map<Sprite, number>();
@@ -66,13 +67,14 @@ export class BallRig extends Container {
     this.flame.visible = false;
     this.rocket.addChild(this.flame);
     this.coil = mk(atlas.att_coil);
-    this.addChild(this.hoop, this.cell, this.glow, this.ball, this.face, this.band, this.cannon, this.rocket, this.coil);
+    this.wing = mk(atlas.att_rang);
+    this.addChild(this.hoop, this.cell, this.glow, this.ball, this.face, this.band, this.cannon, this.rocket, this.coil, this.wing);
     for (let i = 0; i < CHARM_SLOTS.length; i++) {
       const c = mk(Texture.EMPTY);
       this.addChild(c);
       this.charms.push(c);
     }
-    for (const part of [this.hoop, this.cell, this.band, this.cannon, this.rocket, this.coil, ...this.charms]) part.visible = false;
+    for (const part of [this.hoop, this.cell, this.band, this.cannon, this.rocket, this.coil, this.wing, ...this.charms]) part.visible = false;
     this.face.visible = false;
   }
 
@@ -127,6 +129,7 @@ export class BallRig extends Container {
       case 'back': return this.rocket;
       case 'top': return this.coil;
       case 'low': return this.cell;
+      case 'wing': return this.wing;
       default: return null;
     }
   }
@@ -222,6 +225,17 @@ export class BallRig extends Container {
       this.cell.position.set(-ax * 3 - 2, R - 1.5);
       this.cell.scale.set(tk * breathe, tk * breathe);
       this.cell.tint = armed ? 0xc8f8ff : 0xffffff;
+    }
+    if (this.wing.visible) {
+      // a boomerang on the rack spins along when one is in the air
+      let rangOut = false;
+      for (let i = 0; i < w.bCount; i++) {
+        if (w.bkind[i] === 2) { rangOut = true; break; }
+      }
+      const wk = this.partScale.get(this.wing) ?? 1;
+      this.wing.position.set(-7.5, -6.5);
+      this.wing.rotation = rangOut ? time * 14 : Math.sin(time * 3) * 0.15 - 0.5;
+      this.wing.scale.set(wk, wk);
     }
     for (let i = 0; i < this.charms.length; i++) {
       const c = this.charms[i];

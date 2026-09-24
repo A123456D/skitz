@@ -9,6 +9,8 @@ export interface CharacterDef {
   face?: string;
   blurb: string;
   cost: number; // gold to unlock, 0 = free
+  /** DESCEND depth required to unlock (achievement-gated, never purchasable) */
+  unlockDepth?: number;
   startWeapon: WeaponId;
   stats: {
     maxHp: number;
@@ -52,5 +54,16 @@ export const CHARACTERS: CharacterDef[] = [
     startWeapon: 'orbit',
     stats: { maxHp: 95, speed: 132, mass: 1.6, knockMult: 1.15, impactDmg: 1.2, ricochet: 0 },
     perk: 'Orbit Spikes start · contact damage aura',
+  },
+  {
+    id: 'volt',
+    name: 'VOLT',
+    sprite: 'ball_volt',
+    blurb: 'A live wire. Sparks jump off the shell and the horde learns to fear arcs.',
+    cost: 0,
+    unlockDepth: 2,
+    startWeapon: 'chain',
+    stats: { maxHp: 90, speed: 140, mass: 1.4, knockMult: 1.05, impactDmg: 1.1, ricochet: 0 },
+    perk: 'Static Chain start · +18% speed · +10% impact',
   },
 ];

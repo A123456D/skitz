@@ -10,7 +10,7 @@ import { type Biome } from './data/biomes';
 import { META_UPGRADES } from './data/metaShop';
 import { ITEMS, type ItemMods } from './data/items';
 import type { WeaponId, PassiveId } from './data/weapons';
-import { PASSIVES } from './data/weapons';
+import { PASSIVES, WEAPONS } from './data/weapons';
 import {
   ZONES, WALL_SEGS, ZONE_FEATURES, SPAWN_X, SPAWN_Y,
   MAP_W, MAP_H, ZONE_SIZE,
@@ -126,7 +126,8 @@ export class World {
   bdmg: Float32Array;
   bknock: Float32Array;
   bbounces: Int8Array;
-  bkind: Uint8Array;         // 0 = bolt, 1 = saw (Sawring)
+  bkind: Uint8Array;         // 0 = bolt, 1 = saw (Sawring), 2 = boomerang (Wreckang)
+  bphase: Float32Array;      // boomerang time since throw (drives out/return phases)
 
   // ---- enemy bullets ----
   vCap = 400;
@@ -153,6 +154,8 @@ export class World {
 
   // ---- run meta ----
   stats: Stats;
+  /** weapons available in this run's draft (base set + save unlocked) */
+  unlockedWeapons: Set<WeaponId>;
   weapons: Map<WeaponId, number> = new Map(); // id -> level
   passives: Map<PassiveId, number> = new Map();
   items: Map<string, number> = new Map();     // item id -> copies
@@ -302,6 +305,7 @@ export class World {
     this.bknock = f(this.bCap);
     this.bbounces = new Int8Array(this.bCap);
     this.bkind = new Uint8Array(this.bCap);
+    this.bphase = f(this.bCap);
 
     this.vx = f(this.vCap); this.vy = f(this.vCap);
     this.vvx = f(this.vCap); this.vvy = f(this.vCap);
@@ -317,6 +321,12 @@ export class World {
     this.mx = f(this.mCap); this.my = f(this.mCap); this.mt = f(this.mCap);
 
     this.hash = new SpatialHash(ARENA_W, ARENA_H, 64);
+
+    // draft pool: every weapon without an unlockDepth gate (main.ts adds gated
+    // weapons when the save has earned them)
+    this.unlockedWeapons = new Set(
+      (Object.keys(WEAPONS) as WeaponId[]).filter((id) => !WEAPONS[id].unlockDepth),
+    );
 
     this.ox = f(this.oCap);
     this.oy = f(this.oCap);
@@ -653,6 +663,7 @@ export class World {
     this.bknock[i] = knock;
     this.bbounces[i] = bounces;
     this.bkind[i] = kind;
+    this.bphase[i] = 0;
   }
 
   spawnEnemyBullet(x: number, y: number, vx: number, vy: number, dmg: number): void {
@@ -720,6 +731,7 @@ export class World {
       this.bknock[i] = this.bknock[last];
       this.bbounces[i] = this.bbounces[last];
       this.bkind[i] = this.bkind[last];
+      this.bphase[i] = this.bphase[last];
     }
   }
 

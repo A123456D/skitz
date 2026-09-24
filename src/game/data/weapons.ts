@@ -1,6 +1,6 @@
 /** Weapon + passive definitions. All numbers scale by level (1-based). */
 
-export type WeaponId = 'slam' | 'shot' | 'orbit' | 'dash' | 'trail' | 'chain';
+export type WeaponId = 'slam' | 'shot' | 'orbit' | 'dash' | 'trail' | 'chain' | 'boomer';
 export type PassiveId = 'mass' | 'velocity' | 'magnet' | 'vitality' | 'regen' | 'impact' | 'ricochet' | 'luck';
 export type Rarity = 'common' | 'rare' | 'epic';
 
@@ -11,6 +11,8 @@ export interface WeaponDef {
   desc: string;
   maxLevel: number;
   rarity: Rarity;
+  /** DESCEND depth required before this weapon joins drafts (save unlock gate) */
+  unlockDepth?: number;
   /** per-level param table; index = level-1 */
   levels: Array<{
     cd: number;        // seconds between activations
@@ -88,6 +90,17 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       { cd: 0.25, dmg: 0.75, knock: 140, count: 2, radius: 155 },
       { cd: 0.2, dmg: 0.85, knock: 155, count: 3, radius: 170 },
       { cd: 0.15, dmg: 1.0, knock: 175, count: 3, radius: 190 },
+    ],
+  },
+  boomer: {
+    id: 'boomer', name: 'Wreckang', icon: '🪃', maxLevel: 5, rarity: 'rare', unlockDepth: 3,
+    desc: 'Hurls a boomerang that carves through the horde out AND back — piercing everything twice.',
+    levels: [
+      { cd: 2.3, dmg: 13, knock: 200, count: 1, speed: 360 },
+      { cd: 2.0, dmg: 17, knock: 220, count: 1, speed: 380 },
+      { cd: 1.8, dmg: 21, knock: 240, count: 2, speed: 400 },
+      { cd: 1.5, dmg: 27, knock: 270, count: 2, speed: 420 },
+      { cd: 1.25, dmg: 34, knock: 300, count: 3, speed: 440 },
     ],
   },
 };

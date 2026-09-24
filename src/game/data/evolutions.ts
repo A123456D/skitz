@@ -44,6 +44,11 @@ export const EVOLUTIONS: EvolutionDef[] = [
     name: 'Stormcaller', icon: '🌩️',
     desc: 'Static Chain gains +1 target and every victim forks the arc once more, slowing everything it touches.',
   },
+  {
+    weapon: 'boomer', passive: 'vitality', id: 'doomrangs',
+    name: 'Doomrangs', icon: '🌀',
+    desc: 'Wreckang hurls +1 doomrang that hits +30% harder and returns faster — crates shatter on contact.',
+  },
 ];
 
 export function evolutionFor(weapon: WeaponId): EvolutionDef | undefined {

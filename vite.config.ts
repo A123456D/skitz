@@ -16,7 +16,7 @@ export default defineConfig({
     // sibling projects in this workspace get built by parallel sessions —
     // watching them churned the dev server with constant full reloads
     watch: {
-      ignored: ['**/sis-website/**', '**/desync/**', '**/motherroot/**', '**/tmp-skilltest/**'],
+      ignored: ['**/sis-website/**', '**/desync/**', '**/motherroot/**', '**/tmp-skilltest/**', '**/crucible/**', '**/feral/**', '**/context/**', '**/rite-shots/**'],
     },
   },
   test: {

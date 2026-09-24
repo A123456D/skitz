@@ -5,6 +5,9 @@ motherroot/
 sis-website/
 tmp-skilltest/
 rite-shots/
+crucible/
+feral/
+context/
 .zcode/
 
 # build + deps

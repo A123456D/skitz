@@ -48,8 +48,9 @@ export function availableEvolution(w: World): EvolutionDef | null {
 function buildPool(w: World): Array<{ c: PendingChoice; weight: number }> {
   const pool: Array<{ c: PendingChoice; weight: number }> = [];
 
-  // weapons
+  // weapons (depth-gated weapons only appear once the save has earned them)
   for (const wid of Object.keys(WEAPONS) as WeaponId[]) {
+    if (!w.unlockedWeapons.has(wid)) continue;
     const def = WEAPONS[wid];
     const lvl = w.weapons.get(wid) ?? 0;
     if (lvl === 0) {

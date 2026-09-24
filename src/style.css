@@ -338,6 +338,54 @@ html, body {
 .char-row.selected { border-color: var(--accent); }
 .char-row.locked { opacity: 0.55; }
 .char-row canvas { image-rendering: pixelated; width: 48px; height: 48px; flex: none; }
+.skin-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: -6px 0 8px;
+}
+.skin-swatch {
+  background: #0d1226;
+  border: 2px solid var(--panel-edge);
+  border-radius: 10px;
+  padding: 6px 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--ink-dim);
+}
+.skin-swatch canvas { image-rendering: pixelated; width: 32px; height: 32px; }
+.skin-swatch small { font-size: 9px; letter-spacing: 0.08em; font-weight: 700; }
+.skin-swatch.selected { border-color: var(--accent); color: var(--ink); }
+.skin-swatch.locked { opacity: 0.55; cursor: default; }
+.shop-heading {
+  margin: 14px 0 4px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  font-size: calc(var(--ui-scale) * 0.9);
+  color: var(--accent);
+  text-shadow: 0 1px 0 #000;
+}
+.shop-row.milestone .depth-tag { font-weight: 900; color: var(--accent); white-space: nowrap; }
+.shop-row.milestone.earned { opacity: 0.75; }
+.shop-row.milestone.earned .depth-tag { color: var(--good); }
+.unlock-banner {
+  margin: 10px auto;
+  padding: 8px 18px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: rgba(255, 200, 60, 0.08);
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  width: fit-content;
+  animation: unlock-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes unlock-pop {
+  from { transform: scale(0.6); opacity: 0; }
+}
 .char-row .info { flex: 1; }
 .char-row .info b { letter-spacing: 0.06em; }
 .char-row .info small { display: block; color: var(--ink-dim); font-size: calc(var(--ui-scale) * 0.8); margin-top: 3px; line-height: 1.4; }

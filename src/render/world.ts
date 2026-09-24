@@ -12,6 +12,7 @@ import { trailNodesForRender } from '../game/weapons';
 import { WEAPONS } from '../game/data/weapons';
 import { BallRig } from './ballRig';
 import { METEOR_FALL_T, METEOR_RADIUS } from '../game/runEvents';
+import { SKINS } from '../game/data/unlocks';
 import { ZONES } from '../game/data/zones';
 import { BIOMES, type Biome } from '../game/data/biomes';
 import { ELITE_MODS } from '../game/data/eliteMods';
@@ -171,6 +172,8 @@ export class WorldRenderer implements FxSink {
 
   /** the ball + its mounted weapon parts (the player as seen on screen) */
   ballRig!: BallRig;
+  /** active ball skin id (see data/unlocks.ts SKINS) */
+  skin = 'default';
   private lastPx = 0;
   private lastPy = 0;
 
@@ -384,7 +387,13 @@ export class WorldRenderer implements FxSink {
 
   /** Called at run start: applies zone palettes, scatters scenery, draws terrain. */
   initRun(w: World): void {
-    this.ballRig.setBall(this.atlas[w.char.sprite]);
+    // skins recolor the WRECKER family; other balls use their own sprite
+    let sprite = w.char.sprite;
+    if (w.char.id === 'wrecker') {
+      const skin = SKINS.find((s) => s.id === this.skin);
+      if (skin) sprite = skin.sprite;
+    }
+    this.ballRig.setBall(this.atlas[sprite]);
     // per-zone floor tints
     for (let i = 0; i < w.zones.length; i++) {
       (this.layers.zoneFloors.children[i] as TilingSprite).tint = w.zones[i].biome.floorTint;
@@ -731,8 +740,8 @@ export class WorldRenderer implements FxSink {
         sx *= 1 + fuseT * 0.6;
         sy *= 1 + fuseT * 0.6;
         s.tint = Math.sin(w.time * 40) > 0 ? RED : WHITE;
-      } else if (type === ENEMY.boss && w.bossEnraged) {
-        // phase-2 BONZAR pulses molten
+      } else if (ENEMY_DEFS[type].boss && w.bossEnraged) {
+        // phase-2 bosses pulse molten
         s.tint = Math.sin(w.time * 10) > 0 ? 0xff5a4d : 0xffb14b;
         const rage = 1 + Math.sin(w.time * 8) * 0.04;
         s.scale.set(baseScale * sx * rage, baseScale * sy * rage);
@@ -785,10 +794,11 @@ export class WorldRenderer implements FxSink {
       rs.alpha = 0.75 + Math.sin(w.time * 6 + ri) * 0.25;
     }
 
-    // --- bolts (tracer trails; sawring bolts spin) ---
+    // --- bolts (tracer trails; sawring bolts spin; boomerangs carve) ---
     for (let i = 0; i < w.bCount; i++) {
       let s = this.boltSprites[i];
       const isSaw = w.bkind[i] === 1;
+      const isRang = w.bkind[i] === 2;
       if (!s) {
         s = new Sprite(this.atlas.shot);
         s.anchor.set(0.5);
@@ -797,9 +807,10 @@ export class WorldRenderer implements FxSink {
         this.boltPrevX[i] = w.bx[i];
         this.boltPrevY[i] = w.by[i];
       }
-      const wantTex = isSaw ? this.atlas.spike : this.atlas.shot;
+      const wantTex = isSaw ? this.atlas.spike : isRang ? this.atlas.rang_bolt : this.atlas.shot;
       if (s.texture !== wantTex) s.texture = wantTex;
       if (isSaw) s.rotation += dt * 18;
+      if (isRang) s.rotation += dt * 24;
       const moved = Math.abs(w.bx[i] - this.boltPrevX[i]) + Math.abs(w.by[i] - this.boltPrevY[i]);
       if (moved > 5 && !isSaw) {
         const ang = Math.atan2((w.by[i] - this.boltPrevY[i]) * GROUND_TILT, w.bx[i] - this.boltPrevX[i]);
@@ -1296,11 +1307,11 @@ export class WorldRenderer implements FxSink {
     this.particles.burst(x, y * GROUND_TILT, 8, 120, 0.4, 1.2, YELLOW, this.rng);
   }
 
-  bossWarn(x: number, y: number): void {
-    this.ring(x, y, 10, 160, 0.9, RED);
-    this.onBossWarn?.();
+  bossWarn(x: number, y: number, type: number): void {
+    this.ring(x, y, 10, 160, 0.9, type === ENEMY.krusher ? 0xffb14b : RED);
+    this.onBossWarn?.(type);
   }
-  onBossWarn: (() => void) | null = null;
+  onBossWarn: ((type: number) => void) | null = null;
 
   playerAttackFx(kind: 'slam' | 'shot' | 'dash'): void {
     if (kind === 'slam') {

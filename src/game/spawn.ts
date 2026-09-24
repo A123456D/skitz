@@ -39,22 +39,23 @@ export function stepSpawner(w: World, dt: number, ev: Events, maxActive: number)
     const x = clampArena(w.px + Math.cos(a) * dist, ARENA_W);
     const y = clampArena(w.py + Math.sin(a) * dist, ARENA_H);
     const i = w.spawnEnemy(ENEMY.boss, x, y, false, 1 + t / 900);
-    if (i >= 0) ev.bossSpawn(x, y);
+    if (i >= 0) ev.bossSpawn(x, y, ENEMY.boss);
     return;
   }
 
   if (isBossTime(t) && !descending) return; // vanilla solo phase
 
   if (descending) {
-    // the pit sends another BONZAR every ~90s — killing one is a payout pit stop
+    // the pit sends a boss every ~90s — BONZAR at odd depths, KRUSHER at even
     w.descendBossAcc += dt;
     if (!w.bossAlive && w.descendBossAcc >= DESCEND_BOSS_EVERY) {
       w.descendBossAcc = 0;
+      const type = w.descendLevel % 2 === 0 ? ENEMY.krusher : ENEMY.boss;
       const a = w.rng.angle();
       const x = clampArena(w.px + Math.cos(a) * 520, ARENA_W);
       const y = clampArena(w.py + Math.sin(a) * 520, ARENA_H);
-      const i = w.spawnEnemy(ENEMY.boss, x, y, false, (1 + t / 900) * (1 + w.descendLevel * 0.8));
-      if (i >= 0) ev.bossSpawn(x, y);
+      const i = w.spawnEnemy(type, x, y, false, (1 + t / 900) * (1 + w.descendLevel * 0.8));
+      if (i >= 0) ev.bossSpawn(x, y, type);
     }
   }
 
