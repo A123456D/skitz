@@ -1,8 +1,10 @@
-// layers/preview.ts — the prediction & aim read-out. Dotted trajectory with
-// speed-ramped dots (same cyan->amber ramp as the orbit trail — one visual
-// language), terminator markers per prediction end, and the aim arrow with
-// 25%-power tick marks. All sprite-pooled; the game may push new preview data
-// every frame without allocating.
+// layers/preview.ts — the prediction & aim read-out. Designed to be
+// UNMISSABLE at gameplay zoom (polish pass): every dot is sized in SCREEN
+// space (>=4.5px regardless of camera zoom), rides on an additive glow halo
+// for contrast over both dark skies and the region sun, and the end markers
+// (flag pop / red x / rest dot) are screen-scaled and high-contrast.
+// All sprite-pooled; the game may push new preview data every frame without
+// allocating.
 
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { PredPoint } from '../../sim';
@@ -11,9 +13,11 @@ import { AMBER, DANGER, GREEN_WARM, TexFactory } from '../textures';
 
 const MAX_POINTS = 160;
 const MAX_DOTS = 56;
+const MIN_DOT_PX = 4.5; // screen-space floor — never faint at any zoom
 
 export class PreviewLayer {
   readonly container = new Container();
+  private glowDots: Sprite[] = [];   // additive halos, behind the cores
   private dots: Sprite[] = [];
   private px = new Float32Array(MAX_POINTS);
   private py = new Float32Array(MAX_POINTS);
@@ -22,10 +26,12 @@ export class PreviewLayer {
   private end: string | null = null;
   private t = 0;
 
+  private endGlow = new Sprite();    // one halo behind whichever marker is live
   private flagC = new Container();
   private flagPop = 0;
   private deadX!: Sprite;
-  private restDot!: Sprite;
+  private restRing!: Sprite;
+  private restCore!: Sprite;
 
   private aimC = new Container();
   private aimShaft!: Sprite;
@@ -37,7 +43,17 @@ export class PreviewLayer {
   private aimPower = 0;
 
   constructor(tex: TexFactory) {
+    const glowTex = tex.glow(64);
     const dotTex = tex.dot(24);
+    // halos first (drawn under the cores)
+    for (let i = 0; i < MAX_DOTS; i++) {
+      const sp = new Sprite(glowTex);
+      sp.anchor.set(0.5);
+      sp.visible = false;
+      sp.blendMode = 'add';
+      this.container.addChild(sp);
+      this.glowDots.push(sp);
+    }
     for (let i = 0; i < MAX_DOTS; i++) {
       const sp = new Sprite(dotTex);
       sp.anchor.set(0.5);
@@ -46,9 +62,17 @@ export class PreviewLayer {
       this.dots.push(sp);
     }
 
+    // end-marker halo (behind whichever marker is live)
+    this.endGlow.texture = glowTex;
+    this.endGlow.anchor.set(0.5);
+    this.endGlow.blendMode = 'add';
+    this.endGlow.visible = false;
+    this.container.addChild(this.endGlow);
+
     // end marker: sunk = a little flag that pops in
     const pole = new Graphics();
-    pole.rect(-1, -30, 2, 34).fill({ color: 0xd8d2c4, alpha: 0.95 });
+    pole.rect(-1, -30, 2, 34).fill({ color: 0xf2ecdc, alpha: 1 });
+    pole.rect(-2.2, -31, 4.4, 3).fill({ color: 0x2c2f38, alpha: 0.9 }); // cap
     const flagSprite = new Sprite(tex.flag(30, 20));
     flagSprite.anchor.set(0, 0.5);
     flagSprite.tint = GREEN_WARM;
@@ -59,15 +83,21 @@ export class PreviewLayer {
 
     this.deadX = new Sprite(tex.xMark(40));
     this.deadX.anchor.set(0.5);
-    this.deadX.tint = DANGER;
+    this.deadX.tint = 0xff4632; // brighter danger red for contrast
     this.deadX.visible = false;
     this.container.addChild(this.deadX);
 
-    this.restDot = new Sprite(tex.ringThin(48, 5));
-    this.restDot.anchor.set(0.5);
-    this.restDot.tint = 0xdfe8f2;
-    this.restDot.visible = false;
-    this.container.addChild(this.restDot);
+    // rest marker: bright ring + solid core ("the ball will stop here")
+    this.restRing = new Sprite(tex.ringThin(48, 6));
+    this.restRing.anchor.set(0.5);
+    this.restRing.tint = 0xf2f6fa;
+    this.restRing.visible = false;
+    this.container.addChild(this.restRing);
+    this.restCore = new Sprite(tex.dot(24));
+    this.restCore.anchor.set(0.5);
+    this.restCore.tint = 0xffffff;
+    this.restCore.visible = false;
+    this.container.addChild(this.restCore);
 
     // aim arrow: shaft + head + 25% ticks, all placed in world axes
     this.aimShaft = new Sprite(tex.streak(64, 12));
@@ -111,56 +141,88 @@ export class PreviewLayer {
     this.aimPower = clamp(power01, 0, 1);
   }
 
-  update(dt: number, ballX: number, ballY: number): void {
+  update(dt: number, ballX: number, ballY: number, camScale: number): void {
     this.t += dt;
+    // Screen-space sizing: world size = desired px / zoom, so dots never get
+    // lost when the bounds framing zooms out or the aim zoom punches in.
+    const inv = 1 / Math.max(camScale, 1e-4);
 
-    // --- trajectory dots
+    // --- trajectory dots (halo + bright core)
     let di = 0;
     if (this.pCount > 1) {
       const step = Math.max(1, Math.ceil(this.pCount / MAX_DOTS));
       for (let i = 0; i < this.pCount && di < MAX_DOTS; i += step) {
-        const sp = this.dots[di++];
-        sp.visible = true;
-        sp.x = this.px[i];
-        sp.y = this.py[i];
         const t01 = clamp(this.ps[i] / 900, 0, 1);
-        sp.tint = speedRamp(t01);
-        const fade = 1 - (i / this.pCount) * 0.45;
-        sp.alpha = 0.85 * fade;
-        sp.width = sp.height = 5 + t01 * 3;
+        const corePx = MIN_DOT_PX + t01 * 2.5;
+        const glowPx = corePx * 2.7;
+        const core = this.dots[di];
+        const halo = this.glowDots[di];
+        di++;
+        core.visible = halo.visible = true;
+        core.x = halo.x = this.px[i];
+        core.y = halo.y = this.py[i];
+        // slightly white-lifted ramp keeps the cyan/amber language but reads
+        // over both dark skies and the sun glow (halo is additive there)
+        core.tint = mixRGB(speedRamp(t01), 0xffffff, 0.12);
+        core.width = core.height = corePx * inv;
+        core.alpha = 1;
+        halo.tint = core.tint;
+        halo.width = halo.height = glowPx * inv;
+        halo.alpha = 0.34 + (i / this.pCount) * 0.1;
       }
     }
-    for (; di < MAX_DOTS; di++) this.dots[di].visible = false;
+    for (; di < MAX_DOTS; di++) {
+      this.dots[di].visible = false;
+      this.glowDots[di].visible = false;
+    }
 
-    // --- end marker at the last point
+    // --- end marker at the last point (screen-scaled, high contrast)
     const showEnd = this.pCount > 0 && this.end !== null;
     const ex = this.pCount > 0 ? this.px[this.pCount - 1] : 0;
     const ey = this.pCount > 0 ? this.py[this.pCount - 1] : 0;
-    this.flagC.visible = showEnd && this.end === 'sunk';
-    this.deadX.visible = showEnd && this.end === 'dead';
-    this.restDot.visible = showEnd && this.end === 'settled';
-    if (this.flagC.visible) {
+    const isSunk = showEnd && this.end === 'sunk';
+    const isDead = showEnd && this.end === 'dead';
+    const isRest = showEnd && this.end === 'settled';
+    this.flagC.visible = isSunk;
+    this.deadX.visible = isDead;
+    this.restRing.visible = isRest;
+    this.restCore.visible = isRest;
+    this.endGlow.visible = showEnd;
+
+    if (showEnd) {
+      this.endGlow.x = ex;
+      this.endGlow.y = ey;
+      this.endGlow.tint = isSunk ? GREEN_WARM : isDead ? DANGER : 0xdfe8f2;
+      this.endGlow.width = this.endGlow.height = (isRest ? 70 : 95) * inv;
+      this.endGlow.alpha = isSunk ? 0.45 : 0.35;
+    }
+
+    if (isSunk) {
       this.flagPop = Math.min(1, this.flagPop + dt * 3.2);
       this.flagC.x = ex;
       this.flagC.y = ey;
-      const pop = 1 + (1 - this.flagPop) * 1.4;
+      const pop = (1 + (1 - this.flagPop) * 1.4) * 1.15 * inv;
       this.flagC.scale.set(pop);
       this.flagC.alpha = this.flagPop;
     } else {
       this.flagPop = 0;
     }
-    if (this.deadX.visible) {
+    if (isDead) {
       this.deadX.x = ex;
       this.deadX.y = ey;
+      const s = (1 + Math.sin(this.t * 5) * 0.06) * 1.2 * inv;
+      this.deadX.width = this.deadX.height = 40 * s;
       this.deadX.rotation = Math.sin(this.t * 5) * 0.08;
-      this.deadX.alpha = 0.6 + 0.3 * Math.sin(this.t * 7);
+      this.deadX.alpha = 0.85 + 0.15 * Math.sin(this.t * 7);
     }
-    if (this.restDot.visible) {
-      this.restDot.x = ex;
-      this.restDot.y = ey;
+    if (isRest) {
       const p = 0.5 + 0.5 * Math.sin(this.t * 3.4);
-      this.restDot.width = this.restDot.height = 12 + p * 5;
-      this.restDot.alpha = 0.4 + p * 0.35;
+      this.restRing.x = this.restCore.x = ex;
+      this.restRing.y = this.restCore.y = ey;
+      this.restRing.width = this.restRing.height = (16 + p * 6) * inv;
+      this.restRing.alpha = 0.7 + p * 0.3;
+      this.restCore.width = this.restCore.height = 7 * inv;
+      this.restCore.alpha = 1;
     }
 
     // --- aim arrow anchored at the ball (components placed in world axes)

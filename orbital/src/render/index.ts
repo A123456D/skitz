@@ -128,7 +128,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.milo.markAim(this.aimActive);
     this.milo.update(w, dt);
     this.vfx.update(dt);
-    this.preview.update(dt, w.ball.x, w.ball.y);
+    this.preview.update(dt, w.ball.x, w.ball.y, this.cam.scale);
 
     // --- draw
     this.cam.applyToRoot(this.worldRoot);
@@ -212,6 +212,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
 
   setAim(active: boolean, dirX: number, dirY: number, power01: number): void {
     this.aimActive = active;
+    this.cam.setAimState(active, dirX, dirY); // aim-time zoom on the ball
     this.preview.setAim(active, dirX, dirY, power01);
     this.milo.setAimState(active, dirX, dirY, power01);
   }

@@ -13,6 +13,8 @@ export interface Bounds { cx: number; cy: number; rx: number; ry: number }
 export interface BallLike { x: number; y: number }
 
 const DEFAULT_MARGIN = 1.18;
+const AIM_ZOOM = 1.6;  // zoom multiplier while aiming (design polish pass)
+const AIM_BIAS = 0.25; // fraction of the zoomed viewport kept ahead of the ball
 
 export class Camera {
   /** Uniform world→screen scale. */
@@ -27,8 +29,14 @@ export class Camera {
 
   private baseCx = 0;
   private baseCy = 0;
+  private baseScale = 1;
   private follow = false;
   private followCap: PtOut = { x: 0, y: 0 };
+
+  // aim-time zoom state (set from the renderer's setAim)
+  private aimOn = false;
+  private aimDirX = 1;
+  private aimDirY = 0;
 
   private shakeMag = 0;
   private t = 0;
@@ -46,19 +54,30 @@ export class Camera {
   frame(b: Bounds, snap = false): void {
     this.baseCx = b.cx;
     this.baseCy = b.cy;
-    const s = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
+    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
     if (snap || this.scale === 1) {
-      this.scale = s;
+      this.scale = this.baseScale;
       this.cx = b.cx;
       this.cy = b.cy;
     } else {
-      this.scale = expDamp(this.scale, s, 4, 1 / 60);
+      this.scale = expDamp(this.scale, this.baseScale, 4, 1 / 60);
     }
   }
 
   /** Re-fit without easing after a viewport resize (keeps the center). */
   refit(b: Bounds): void {
-    this.scale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
+    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
+    this.scale = this.baseScale;
+  }
+
+  /** Aim zoom state: while active the camera eases to AIM_ZOOM on the ball. */
+  setAimState(active: boolean, dirX: number, dirY: number): void {
+    this.aimOn = active;
+    if (active) {
+      const l = Math.hypot(dirX, dirY) || 1;
+      this.aimDirX = dirX / l;
+      this.aimDirY = dirY / l;
+    }
   }
 
   update(dt: number, ball: BallLike, flying: boolean): void {
@@ -66,8 +85,10 @@ export class Camera {
 
     // Gentle ball-follow: chase a point capped inside the level ellipse so the
     // camera pans with the shot but the course edge never leaves the frame.
-    const tgtX = this.follow ? this.baseCx + this.followCap.x : this.baseCx;
-    const tgtY = this.follow ? this.baseCy + this.followCap.y : this.baseCy;
+    let tgtX = this.follow ? this.baseCx + this.followCap.x : this.baseCx;
+    let tgtY = this.follow ? this.baseCy + this.followCap.y : this.baseCy;
+    let tgtScale = this.baseScale;
+    let rate = flying ? 2.4 : 1.8;
 
     if (flying) {
       if (!this.follow) {
@@ -87,12 +108,22 @@ export class Camera {
         this.followCap.x = (lx / ld) * maxD;
         this.followCap.y = (ly / ld) * maxD;
       }
+    } else if (this.aimOn) {
+      // Aim framing: zoom in on the ball, biased ~25% of the zoomed viewport
+      // ahead along the aim direction so the shot line owns the screen.
+      const zoom = this.baseScale * AIM_ZOOM;
+      const ahead = AIM_BIAS * Math.min(this.viewW, this.viewH) / zoom;
+      tgtX = ball.x + this.aimDirX * ahead;
+      tgtY = ball.y + this.aimDirY * ahead;
+      tgtScale = zoom;
+      rate = 3.2; // responsive zoom-in, same expDamp family on the way out
     } else {
       this.follow = false;
     }
 
-    this.cx = expDamp(this.cx, tgtX, flying ? 2.4 : 1.8, dt);
-    this.cy = expDamp(this.cy, tgtY, flying ? 2.4 : 1.8, dt);
+    this.cx = expDamp(this.cx, tgtX, rate, dt);
+    this.cy = expDamp(this.cy, tgtY, rate, dt);
+    this.scale = expDamp(this.scale, tgtScale, 3.0, dt);
 
     // --- shake
     this.shakeMag = decayShake(this.shakeMag, dt);
