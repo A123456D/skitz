@@ -43,10 +43,31 @@ const PROG: number[][] = [
 export function createMusic(core: MusicCore): MusicEngine {
   const { ctx, bus, noise } = core;
 
+  // ------------------------------------------------- shimmer space (fake verb)
+  // One delay-feedback network: delay 0.28 s, feedback 0.35 darkened by a
+  // lowpass. Feedback < 1 is unconditionally stable; the lowpass in the loop
+  // absorbs the high modes that make raw feedback rings sound metallic, so the
+  // tail reads as plate-reverb depth for a fraction of the CPU.
+  const send = ctx.createGain();
+  send.gain.value = 0.4; // conservative wet level — depth, not a wash
+  const dly = ctx.createDelay(1);
+  dly.delayTime.value = 0.28;
+  const fb = ctx.createGain();
+  fb.gain.value = 0.35;
+  const dlyFlt = ctx.createBiquadFilter();
+  dlyFlt.type = 'lowpass';
+  dlyFlt.frequency.value = 2400;
+  send.connect(dly);
+  dly.connect(dlyFlt);
+  dlyFlt.connect(fb);
+  fb.connect(dly);
+  dlyFlt.connect(bus); // wet output tap
+
   function mkState(stepDur: number, level: number): ThemeState {
     const gain = ctx.createGain();
     gain.gain.value = 0;
     gain.connect(bus);
+    gain.connect(send); // every pad/arp bed gets the shimmer space for free
     return { gain, next: 0, step: 0, stepDur, level };
   }
 
@@ -58,6 +79,35 @@ export function createMusic(core: MusicCore): MusicEngine {
 
   let active: AudioTheme = 'practice';
   let timer: number | null = null;
+
+  // ------------------------------------------------------ shimmer arp layer
+  // Theme-agnostic slow arpeggio high above each bed. Notes bloom (1 s+ attack)
+  // and lean on the delay network, so two quiet oscillators per step fill the
+  // stereo field. High register keeps it clear of the pads' low mids.
+  const SHIMMER: Record<AudioTheme, number[]> = {
+    practice: [76, 79, 84, 88], // C major colouring over I–vi–IV–V
+    graveyard: [75, 80, 82, 87], // b9 tension suits the scrap-metal drone
+    giants: [76, 83, 88, 95], // open fifths for the colossi
+    course: [69, 76, 81, 88], // Am colouring over the endgame arp
+  };
+  const SHIMMER_STEP = 2.6; // seconds between notes — slow by design
+  const shimGain = ctx.createGain();
+  shimGain.gain.value = 0.8;
+  shimGain.connect(bus);
+  shimGain.connect(send);
+  const shim = { next: 0, step: 0 };
+
+  function stepShimmer(t: number): void {
+    const pool = SHIMMER[active];
+    const m = pool[shim.step % pool.length];
+    // tone()'s envelope starts at MIN_VOL and ramps — long attack = no click.
+    tone({ out: shimGain, sources: [] }, ctx, 'sine', hz(m), null, t, 3.4, 0.018, 1.4);
+    // Every third note adds a soft fifth an octave-kiss higher, offset so the
+    // arp never stacks on the grid — keeps the shimmer from feeling sequenced.
+    if (shim.step % 3 === 1) {
+      tone({ out: shimGain, sources: [] }, ctx, 'sine', hz(m + 7), null, t + 0.9, 2.4, 0.011, 1.2);
+    }
+  }
 
   // ----------------------------------------------------------- voice helpers
 
@@ -210,6 +260,7 @@ export function createMusic(core: MusicCore): MusicEngine {
       if (timer !== null) return;
       const now = ctx.currentTime;
       states.forEach((st) => { if (st.next < now) st.next = now + 0.1; });
+      if (shim.next < now) shim.next = now + 0.3; // offset from the first pad hit
       timer = window.setInterval(() => {
         const t0 = ctx.currentTime;
         const st = states.get(active);
@@ -220,6 +271,14 @@ export function createMusic(core: MusicCore): MusicEngine {
           scheduleStep(active, st, st.next);
           st.next += st.stepDur;
           st.step++;
+        }
+        // Shimmer layer advances on its own clock, same catch-up discipline.
+        if (shim.next < t0 - 0.1) shim.next = t0 + 0.05;
+        let shimGuard = 0;
+        while (shim.next < t0 + HORIZON && shimGuard++ < 4) {
+          stepShimmer(shim.next);
+          shim.next += SHIMMER_STEP;
+          shim.step++;
         }
       }, 200);
     },
@@ -237,6 +296,11 @@ export function createMusic(core: MusicCore): MusicEngine {
         // already stopped — nothing to do
       }
       states.forEach((st) => st.gain.disconnect());
+      shimGain.disconnect();
+      send.disconnect();
+      dly.disconnect();
+      dlyFlt.disconnect();
+      fb.disconnect();
       pulseAM.disconnect();
       washGain.disconnect();
     },

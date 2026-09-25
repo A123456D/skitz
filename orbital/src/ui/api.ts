@@ -15,6 +15,10 @@ export interface LevelResult {
   fragments: { total: number; taken: number };
   nextLevelId: string | null;
   modifiers: string[];
+  /** Wall-clock seconds this run took (TIME ATTACK etc.), if tracked. */
+  timeSec?: number;
+  /** Best previously-seen time for this level, if any. */
+  bestSec?: number;
 }
 
 export interface UIHooks {
@@ -26,6 +30,8 @@ export interface UIHooks {
   onNextLevel(): void;
   onReplay(): void;
   onSettingsChanged(s: Settings): void;
+  /** Undo the last Gravity Pin of the current aim phase. */
+  onUndoPin?(): void;
 }
 
 export interface UIHandle {

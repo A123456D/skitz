@@ -276,7 +276,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     w.switches.forEach((s, i) => this.switchIdx.set(s.def.id, i));
 
     this.cam.frame(b, true);
-    this.bg.build(w.def.region, b);
+    this.bg.build(w.def.region, b, w.def.id); // def.id -> per-level bg variant
     this.bg.resize(this.cam.viewW, this.cam.viewH);
     this.bodies.build(w, sun.x, sun.y);
     this.zones.build(w);

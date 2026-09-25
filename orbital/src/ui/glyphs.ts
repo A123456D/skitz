@@ -82,3 +82,13 @@ export const replay = (s = 16, sw = 1.8): string =>
     '<path d="M17.9 2.8 V6.8 H13.9"/>',
     s, sw,
   );
+
+/** Tee with a slash — "undo pin" (same tee body as the HUD pin markers). */
+export const teeSlash = (s = 16, sw = 1.6): string =>
+  wrap(
+    '<circle cx="12" cy="5.6" r="3.1"/>' +
+    '<path d="M9.6 9.4 L11 16.6 H13 L14.4 9.4"/>' +
+    '<path d="M8.2 19.4 H15.8"/>' +
+    '<path d="M4.5 4 L19.5 20"/>',
+    s, sw,
+  );

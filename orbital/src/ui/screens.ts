@@ -248,6 +248,10 @@ export function buildResults(a: {
   const term = div('ob-term');
   const score = div('ob-card-score');
   const medals = div('ob-medals');
+  // Optional run-time readout — LevelResult may gain timeSec/bestSec from the
+  // integrator; the line stays hidden entirely while the fields are absent.
+  const timeLine = div('ob-card-time');
+  timeLine.style.display = 'none';
   const objs = div('ob-card-objs');
   const frags = div('ob-card-frags');
   const modsRow = div('ob-card-mods');
@@ -261,7 +265,7 @@ export function buildResults(a: {
   bMenu.addEventListener('click', a.onMenu);
   actions.append(bNext, bReplay, bMenu);
 
-  card.append(head, term, score, medals, objs, frags, modsRow, actions);
+  card.append(head, term, score, medals, timeLine, objs, frags, modsRow, actions);
   root.append(card);
 
   const medalRow = (glyph: string, label: string, earned: boolean): string =>
@@ -286,6 +290,19 @@ export function buildResults(a: {
         medalRow(flag(14), 'PAR OR BETTER', r.medals.par) +
         medalRow(target(14), 'ALL OBJECTIVES', r.medals.obj) +
         medalRow(spark(14), 'ALL FRAGMENTS', r.medals.frag);
+
+      // Defensive optional read: timeSec/bestSec are not in the contract yet.
+      const rx = r as LevelResult & { timeSec?: number; bestSec?: number };
+      const hasTime = typeof rx.timeSec === 'number' && Number.isFinite(rx.timeSec);
+      const hasBest = typeof rx.bestSec === 'number' && Number.isFinite(rx.bestSec);
+      if (hasTime) {
+        timeLine.textContent =
+          `TIME ${rx.timeSec!.toFixed(1)}s` + (hasBest ? ` · BEST ${rx.bestSec!.toFixed(1)}s` : '');
+        timeLine.style.display = '';
+      } else {
+        timeLine.textContent = '';
+        timeLine.style.display = 'none';
+      }
 
       objs.innerHTML = r.objectives.length
         ? r.objectives
@@ -313,6 +330,13 @@ export function buildResults(a: {
 
 // ---------------------------------------------------------------- SETTINGS
 
+/**
+ * Settings gains `aimForward?: boolean` from the integrator (save/save.ts is
+ * not ours to edit). Model it as an intersection so the code is structurally
+ * compatible before AND after the field lands; absent = pull back.
+ */
+type SettingsEx = Settings & { aimForward?: boolean };
+
 export interface SettingsPane {
   root: HTMLElement;
   /** Sync the controls from a Settings object without emitting onChange. */
@@ -328,7 +352,7 @@ export function buildSettings(
   const panel = div('ob-set-panel');
   panel.append(el('h2', 'ob-set-title', 'CALIBRATION'));
 
-  const s: Settings = { ...initial };
+  const s: SettingsEx = { ...initial };
   const emit = (): void => onChange({ ...s });
 
   const sliderRow = (label: string): HTMLInputElement => {
@@ -355,28 +379,44 @@ export function buildSettings(
     emit();
   });
 
-  const toggleRow = (label: string, key: 'prediction' | 'shake'): HTMLButtonElement => {
+  type ToggleKey = 'prediction' | 'shake' | 'aimForward';
+  /**
+   * Generic toggle row. `labels` overrides the ON/OFF state text — the aim
+   * style is a mode switch, not a boolean, so it reads PULL BACK / POINT
+   * FORWARD. Inverted semantics (true = point forward) live entirely in the
+   * label pairing; the stored value stays a plain boolean.
+   */
+  const toggleRow = (
+    label: string,
+    key: ToggleKey,
+    labels: readonly [string, string] = ['OFF', 'ON'],
+  ): { btn: HTMLButtonElement; sync(): void } => {
     const row = div('ob-set-row');
     row.append(el('span', 'ob-set-label', label));
+    const state = (): boolean => s[key] === true;
     const b = button(
-      'ob-toggle ob-int' + (s[key] ? ' is-on' : ''),
+      'ob-toggle ob-int' + (state() ? ' is-on' : ''),
       '<span class="ob-toggle-track"><span class="ob-toggle-thumb"></span></span>' +
-        `<span class="ob-toggle-state">${s[key] ? 'ON' : 'OFF'}</span>`,
+        `<span class="ob-toggle-state">${state() ? labels[1] : labels[0]}</span>`,
     );
-    b.setAttribute('aria-pressed', String(s[key]));
+    const sync = (): void => {
+      b.classList.toggle('is-on', state());
+      b.setAttribute('aria-pressed', String(state()));
+      b.querySelector('.ob-toggle-state')!.textContent = state() ? labels[1] : labels[0];
+    };
+    b.setAttribute('aria-pressed', String(state()));
     b.addEventListener('click', () => {
-      s[key] = !s[key];
-      b.classList.toggle('is-on', s[key]);
-      b.setAttribute('aria-pressed', String(s[key]));
-      b.querySelector('.ob-toggle-state')!.textContent = s[key] ? 'ON' : 'OFF';
+      s[key] = !state();
+      sync();
       emit();
     });
     row.append(b);
     panel.append(row);
-    return b;
+    return { btn: b, sync };
   };
   const predToggle = toggleRow('PREDICTION', 'prediction');
   const shakeToggle = toggleRow('SCREENSHAKE', 'shake');
+  const aimToggle = toggleRow('AIM STYLE', 'aimForward', ['PULL BACK', 'POINT FORWARD']);
 
   const bBack = button('ob-chip ob-int ob-set-back', `${back(13)}<span>BACK</span>`);
   bBack.addEventListener('click', onBack);
@@ -386,18 +426,18 @@ export function buildSettings(
   return {
     root,
     apply(n: Settings): void {
+      const nx = n as SettingsEx;
       s.audio = n.audio;
       s.music = n.music;
       s.prediction = n.prediction;
       s.shake = n.shake;
+      // Absent field = pull back (false), never undefined leakage into state.
+      s.aimForward = nx.aimForward === true;
       audioSlider.value = String(Math.round(s.audio * 100));
       musicSlider.value = String(Math.round(s.music * 100));
-      predToggle.classList.toggle('is-on', s.prediction);
-      predToggle.setAttribute('aria-pressed', String(s.prediction));
-      predToggle.querySelector('.ob-toggle-state')!.textContent = s.prediction ? 'ON' : 'OFF';
-      shakeToggle.classList.toggle('is-on', s.shake);
-      shakeToggle.setAttribute('aria-pressed', String(s.shake));
-      shakeToggle.querySelector('.ob-toggle-state')!.textContent = s.shake ? 'ON' : 'OFF';
+      predToggle.sync();
+      shakeToggle.sync();
+      aimToggle.sync();
     },
   };
 }

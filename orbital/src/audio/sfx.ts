@@ -90,7 +90,11 @@ function sLaunch(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 function sBounce(v: SfxVoice, c: SfxCore, t: number, k: number, p: number): void {
   // Short sine thunk — pitch + gain scale with impact speed (caller maps speed→pitch).
   const sp = Math.min(2, Math.max(0.2, p));
-  tone(v, c.ctx, 'sine', 150 * sp, 70, t, 0.13, 0.34 * k * Math.min(1, sp));
+  // ±4 cents of random detune keeps rapid impacts from machine-gunning into one
+  // tone. 2^(cents/1200) is the exact cent conversion; Math.random is fine here
+  // because it only feeds scheduled audio parameters, never render state.
+  const d = Math.pow(2, (Math.random() * 8 - 4) / 1200);
+  tone(v, c.ctx, 'sine', 150 * sp * d, 70 * d, t, 0.13, 0.34 * k * Math.min(1, sp));
   hiss(v, c, t, 0.05, 0.1 * k * Math.min(1, sp), 'lowpass', 900, 300);
 }
 
@@ -102,14 +106,21 @@ function sHazard(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 }
 
 function sSink(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // THE payoff: deep resonant thoom, then a quick rising major arp (cup rattle → fanfare).
+  // THE payoff, staged: (1) thoom — the cup swallows the ball, sub body decays
+  // under it; (2) rising C-major fanfare with a top-octave sparkle; then a soft
+  // cymbal-ish noise tail for air. Arp gains stay modest so the master
+  // compressor doesn't pump when the chord lands on the thoom's tail.
   tone(v, c.ctx, 'sine', 84, 36, t, 0.75, 0.5 * k);
   tone(v, c.ctx, 'sine', 42, 30, t, 0.9, 0.22 * k); // octave-down body
   hiss(v, c, t, 0.5, 0.16 * k, 'lowpass', 240, 90, 0.7, 0.03);
-  const arp = [523.25, 659.26, 783.99]; // C5 E5 G5
-  for (let i = 0; i < 3; i++) {
-    tone(v, c.ctx, 'triangle', arp[i], null, t + 0.3 + i * 0.13, 0.5, 0.15 * k, 0.006);
+  const arp = [523.25, 659.26, 783.99, 1046.5]; // C5 E5 G5 C6
+  for (let i = 0; i < arp.length; i++) {
+    tone(v, c.ctx, 'triangle', arp[i], null, t + 0.3 + i * 0.12, 0.55, (i === 3 ? 0.1 : 0.13) * k, 0.006);
   }
+  // Cymbal tail: bright noise that swells slowly and darkens as it decays
+  // (highpass sweeps down) — brushed shimmer, not a static burst. Pure fade-in
+  // attack ramp means it can never click.
+  hiss(v, c, t + 0.3, 1.7, 0.055 * k, 'highpass', 5200, 2600, 0.7, 0.35);
 }
 
 function sLipout(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -188,7 +199,9 @@ function sWormhole(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 }
 
 function sUiTick(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  tone(v, c.ctx, 'sine', 1900, null, t, 0.035, 0.09 * k, 0.002);
+  // Softer + slightly lower than before: ticks fire on every slider move, and
+  // at 1900 Hz/0.09 they stacked into a harsh fizz while dragging on touch.
+  tone(v, c.ctx, 'sine', 1650, null, t, 0.03, 0.05 * k, 0.002);
 }
 
 function sUiSelect(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -220,7 +233,7 @@ export const SFX_DURATION: Record<SfxName, number> = {
   launch: 0.5,
   bounce: 0.2,
   hazard: 0.4,
-  sink: 1.3,
+  sink: 2.1, // now spans the cymbal tail (0.3 + 1.7 s) for cap bookkeeping
   lipout: 0.3,
   settled: 0.4,
   voided: 1.05,

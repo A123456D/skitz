@@ -834,3 +834,23 @@
   .ob-stars i, .ob-ring--b, .ob-toast { animation: none; }
   .ob-root * { transition-duration: 0.01ms !important; }
 }
+
+/* ---------------------------------------------------------------- ICON BTN
+   Restart / undo-pin share .ob-pausebtn's 48px box. Undo renders only while a
+   world is bound and is gated by .is-off when pins or the hook are missing. */
+.ob-pausebtn:active { transform: scale(0.94); }
+.ob-pausebtn:disabled { cursor: default; }
+.ob-undobtn.is-off { opacity: 0.32; pointer-events: none; }
+
+/* -------------------------------------------------------- RESULTS TIME LINE
+   Optional run-time readout (LevelResult.timeSec / bestSec) — small mono line
+   under the medals, hidden entirely when the fields are absent. */
+.ob-card-time {
+  text-align: center;
+  font-family: var(--ob-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: -8px;
+}

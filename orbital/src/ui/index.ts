@@ -18,13 +18,28 @@ import {
   type SettingsPane,
 } from './screens';
 
-const DEFAULT_SETTINGS: Settings = { audio: 0.8, music: 0.7, prediction: true, shake: true };
+const DEFAULT_SETTINGS: Settings = { audio: 0.8, music: 0.7, prediction: true, shake: true, aimForward: false };
+
+/**
+ * The integrator adds `onUndoPin?: () => void` to UIHooks (src/ui/api.ts stays
+ * read-only for us). Read it defensively so the HUD degrades to a disabled
+ * button until the hook lands.
+ */
+type UIHooksEx = UIHooks & { onUndoPin?: () => void };
 
 export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
   root.classList.add('ob-root');
+  const hx = hooks as UIHooksEx;
 
   // --- build layers
-  const hud: Hud = buildHud(hooks.onPause);
+  const hud: Hud = buildHud({
+    onPause: hooks.onPause,
+    onRestart: hooks.onRestart,
+    onUndoPin: () => hx.onUndoPin?.(),
+    // Checked per change, not per click: the button stays disabled until the
+    // integrator's optional hook is actually present.
+    canUndoPin: () => typeof hx.onUndoPin === 'function',
+  });
   const title = buildTitle(
     () => show('select'), // title PLAY opens the Course map
     () => {
@@ -87,6 +102,7 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
 
     bindWorld(w: World | null): void {
       if (!w) hud.clear();
+      hud.setWorldBound(w !== null);
     },
 
     updateHud(w: World, pinsPlacedThisStroke: number, objectiveDone: boolean[]): void {

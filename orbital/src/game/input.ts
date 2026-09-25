@@ -32,6 +32,8 @@ export class InputController {
   charging = false;
   chargeT = 0;
   enabled = false;
+  /** true: drag toward the target fires toward it; false: slingshot pull. */
+  aimForward = false;
 
   constructor(el: HTMLElement, cb: InputCallbacks) {
     this.el = el;
@@ -76,8 +78,9 @@ export class InputController {
   }
 
   private emitAim(): void {
-    const dx = this.startX - this.curX;
-    const dy = this.startY - this.curY;
+    const sign = this.aimForward ? 1 : -1;
+    const dx = sign * (this.curX - this.startX);
+    const dy = sign * (this.curY - this.startY);
     const len = Math.hypot(dx, dy);
     if (len < DRAG_THRESHOLD) return;
     const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * 0.35;
@@ -128,8 +131,9 @@ export class InputController {
       return;
     }
     if (this.dragged) {
-      const dx = this.startX - this.curX;
-      const dy = this.startY - this.curY;
+      const sign = this.aimForward ? 1 : -1;
+      const dx = sign * (this.curX - this.startX);
+      const dy = sign * (this.curY - this.startY);
       const len = Math.hypot(dx, dy);
       if (len < DRAG_THRESHOLD) {
         this.cb.onAimCancel();

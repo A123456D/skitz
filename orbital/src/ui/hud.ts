@@ -3,7 +3,7 @@
 import type { StoryLine, World } from '../sim';
 import { VOICES } from '../story/voices';
 import { el } from './dom';
-import { check, shard, tee } from './glyphs';
+import { check, replay, shard, tee, teeSlash } from './glyphs';
 import { strokeTerm, termPolarity } from './terms';
 
 export interface Hud {
@@ -13,12 +13,25 @@ export interface Hud {
   clear(): void;
   toast(text: string, kind?: 'good' | 'bad' | 'neutral'): void;
   subtitle(line: StoryLine | null): void;
+  /** Show/hide the UNDO PIN button (only meaningful while a world is bound). */
+  setWorldBound(v: boolean): void;
   destroy(): void;
+}
+
+/** Actions the HUD bubbles up to the integrator. */
+export interface HudActions {
+  onPause(): void;
+  /** UIHooks.onRestart — wired by the integrator. */
+  onRestart(): void;
+  /** Resolved lazily so the optional UIHooks.onUndoPin can appear at any time. */
+  onUndoPin(): void;
+  /** True only while the integrator's onUndoPin hook is present. */
+  canUndoPin(): boolean;
 }
 
 const SUBTITLE_MS = 2600; // design §8/§11: ~2.6 s or until advance
 
-export function buildHud(onPause: () => void): Hud {
+export function buildHud(actions: HudActions): Hud {
   const root = el('div', 'ob-hud');
 
   // --- top-left: strokes vs par, scorecard numerals + live golf term
@@ -33,15 +46,31 @@ export function buildHud(onPause: () => void): Hud {
   // --- bottom-left: remaining pins as physical tee markers
   const pinsBox = el('div', 'ob-pins');
 
-  // --- top-right: objectives chip, fragment pips, pause
+  // --- top-right: objectives chip, fragment pips, restart, undo pin, pause
   const objChip = el('div', 'ob-objectives');
   const fragsRow = el('div', 'ob-frags');
-  const pauseBtn = el('button', 'ob-pausebtn ob-int', `<span class="ob-glyph">${pauseIcon()}</span>`);
-  pauseBtn.type = 'button';
-  pauseBtn.setAttribute('aria-label', 'Pause');
-  pauseBtn.addEventListener('click', onPause);
+  // Icon buttons share the pause button's 48 px hit box — the smallest target
+  // that stays reliably tappable on touch (WCAG 2.5.5 AAA).
+  const mkIconBtn = (glyph: string, label: string): HTMLButtonElement => {
+    const b = el('button', 'ob-pausebtn ob-int', `<span class="ob-glyph">${glyph}</span>`);
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    return b;
+  };
+  const restartBtn = mkIconBtn(replay(16, 2.2), 'Restart');
+  restartBtn.addEventListener('click', actions.onRestart);
+  const undoBtn = mkIconBtn(teeSlash(16, 1.7), 'Undo pin');
+  undoBtn.classList.add('ob-undobtn');
+  undoBtn.addEventListener('click', actions.onUndoPin);
+  // Hidden until a world is bound; disabled until the hook exists AND pins
+  // are down — both re-checked cheaply on change only (see caches below).
+  undoBtn.disabled = true;
+  undoBtn.style.display = 'none';
+  const pauseBtn = mkIconBtn(pauseIcon(), 'Pause');
+  pauseBtn.addEventListener('click', actions.onPause);
   const statusTop = el('div', 'ob-status-top');
-  statusTop.append(fragsRow, pauseBtn);
+  statusTop.append(fragsRow, restartBtn, undoBtn, pauseBtn);
   const status = el('div', 'ob-status');
   status.append(objChip, statusTop);
 
@@ -56,6 +85,18 @@ export function buildHud(onPause: () => void): Hud {
   let fragsKey = '';
   let objsKey = '';
   let flying = false;
+  let undoKey = '';
+  let worldBound = false;
+
+  /** Undo enablement = hook present AND at least one pin standing. */
+  function syncUndo(w: World): void {
+    const can = worldBound && actions.canUndoPin() && w.pins.length > 0;
+    const key = can ? '1' : '0';
+    if (key === undoKey) return;
+    undoKey = key;
+    undoBtn.disabled = !can;
+    undoBtn.classList.toggle('is-off', !can);
+  }
 
   function renderPins(w: World, pinsPlaced: number): void {
     const budget = Math.max(0, w.def.pinBudget);
@@ -179,6 +220,7 @@ export function buildHud(onPause: () => void): Hud {
       renderPins(w, pinsPlaced);
       renderFrags(w);
       renderObjectives(w, objectiveDone);
+      syncUndo(w);
       // Minimal HUD during flight: pins/objectives recede, score + pause stay.
       if (w.ball.flying !== flying) {
         flying = w.ball.flying;
@@ -202,7 +244,21 @@ export function buildHud(onPause: () => void): Hud {
       pinsBox.innerHTML = '';
       fragsRow.innerHTML = '';
       objChip.innerHTML = '';
+      undoKey = '';
+      undoBtn.disabled = true;
+      undoBtn.classList.add('is-off');
       subtitle(null);
+    },
+
+    setWorldBound(v: boolean): void {
+      worldBound = v;
+      // Rendered only while a world is bound; visibility is not a per-tick concern.
+      undoBtn.style.display = v ? '' : 'none';
+      if (!v) {
+        undoKey = '0';
+        undoBtn.disabled = true;
+        undoBtn.classList.add('is-off');
+      }
     },
 
     destroy(): void {

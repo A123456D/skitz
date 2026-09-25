@@ -88,6 +88,31 @@ export function speedRamp(t01: number): number {
   return mixRGB(RAMP_SLOW, RAMP_FAST, smoothstep(clamp(t01, 0, 1)));
 }
 
+// ------------------------------------------------- per-level bg variants
+
+/** Number of distinct background archetypes (see layers/background.ts). */
+export const BG_VARIANT_COUNT = 6;
+
+/**
+ * Per-level background archetype, 0..BG_VARIANT_COUNT-1, derived purely from
+ * the level id (no level-data changes needed): FNV hash % 6, offset by the
+ * level's six-level block index (a cheap region-ish rotation), then walked
+ * forward until it differs from the PREVIOUS level's variant — so consecutive
+ * levels, including block boundaries, never repeat an archetype. (Regions hold
+ * 7/7/7/3 levels, so with 6 archetypes a strict within-region bijection is
+ * impossible; consecutive-uniqueness is the strongest guarantee available.)
+ */
+export function bgVariantFor(levelId: string): number {
+  const n = parseInt(levelId.slice(-2), 10);
+  const block = Number.isFinite(n) && n >= 1 ? Math.floor((n - 1) / BG_VARIANT_COUNT) : 0;
+  let v = (hashSeed(levelId) + block) % BG_VARIANT_COUNT;
+  if (Number.isFinite(n) && n > 1) {
+    const prevId = levelId.slice(0, -2) + String(n - 1).padStart(2, '0');
+    if (bgVariantFor(prevId) === v) v = (v + 1) % BG_VARIANT_COUNT; // de-collide
+  }
+  return v;
+}
+
 // ------------------------------------------------------------- camera math
 
 /**

@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BEACON_DUTY,
   BEACON_PERIOD,
+  BG_VARIANT_COUNT,
   beaconPulse,
+  bgVariantFor,
   bucketSize,
   bodyTextureKey,
   capToEllipse,
@@ -201,6 +203,37 @@ describe('texture cache keys', () => {
     expect(bucketSize(90, 32, 64, 1024)).toBe(96);
     expect(bucketSize(9999, 32, 64, 1024)).toBe(1024);
     expect(bucketSize(1, 32, 64, 1024)).toBe(64);
+  });
+});
+
+describe('per-level background variant', () => {
+  const id = (n: number): string => `L${String(n).padStart(2, '0')}`;
+
+  it('is deterministic, pure, and lands inside 0..5', () => {
+    for (let n = 1; n <= 24; n++) {
+      const v = bgVariantFor(id(n));
+      expect(v).toBe(bgVariantFor(id(n))); // stable across calls
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(BG_VARIANT_COUNT);
+      expect(Number.isInteger(v)).toBe(true);
+    }
+  });
+
+  it('never repeats an archetype between consecutive levels', () => {
+    for (let n = 2; n <= 24; n++) {
+      expect(bgVariantFor(id(n))).not.toBe(bgVariantFor(id(n - 1)));
+    }
+  });
+
+  it('spreads all 6 archetypes across the 24 levels and is input-sensitive', () => {
+    const used = new Set<number>();
+    for (let n = 1; n <= 24; n++) used.add(bgVariantFor(id(n)));
+    expect(used.size).toBe(BG_VARIANT_COUNT);
+    // arbitrary ids (no L## suffix) still resolve deterministically in-range
+    const v = bgVariantFor('XYZ');
+    expect(v).toBe(bgVariantFor('XYZ'));
+    expect(v).toBeGreaterThanOrEqual(0);
+    expect(v).toBeLessThan(BG_VARIANT_COUNT);
   });
 });
 

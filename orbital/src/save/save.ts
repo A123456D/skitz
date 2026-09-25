@@ -11,6 +11,8 @@ export interface Settings {
   music: number; // 0..1 music bus
   prediction: boolean;
   shake: boolean;
+  /** true = drag toward the target fires toward it; false = slingshot pull. */
+  aimForward: boolean;
 }
 
 export interface SaveData {
@@ -19,6 +21,8 @@ export interface SaveData {
   medals: Record<string, Medal>;
   fragments: Record<string, number[]>;
   settings: Settings;
+  /** Best completion time per level id, seconds. */
+  bestTimes: Record<string, number>;
 }
 
 const DEFAULTS: SaveData = {
@@ -26,7 +30,8 @@ const DEFAULTS: SaveData = {
   unlockedLevel: 0,
   medals: {},
   fragments: {},
-  settings: { audio: 0.8, music: 0.7, prediction: true, shake: true },
+  settings: { audio: 0.8, music: 0.7, prediction: true, shake: true, aimForward: false },
+  bestTimes: {},
 };
 
 export function loadSave(): SaveData {
@@ -41,6 +46,7 @@ export function loadSave(): SaveData {
       settings: { ...DEFAULTS.settings, ...(data.settings ?? {}) },
       medals: data.medals ?? {},
       fragments: data.fragments ?? {},
+      bestTimes: data.bestTimes ?? {},
     };
   } catch {
     return { ...DEFAULTS, medals: {}, fragments: {}, settings: { ...DEFAULTS.settings } };

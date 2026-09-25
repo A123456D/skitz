@@ -37,8 +37,16 @@ export function bootGame(root: HTMLElement): void {
   const uiRoot = document.createElement('div');
   uiRoot.id = 'ui-root';
   uiRoot.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
+  const vignette = document.createElement('div');
+  vignette.id = 'ob-vignette';
+  const rotate = document.createElement('div');
+  rotate.id = 'ob-rotate';
+  rotate.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="#6fd6e8" stroke-width="1.6"><rect x="6" y="3" width="12" height="18" rx="2.5"/><circle cx="12" cy="18.4" r="1" fill="#6fd6e8" stroke="none"/></svg><p>Rotate to landscape</p>';
   root.appendChild(host);
+  root.appendChild(vignette);
   root.appendChild(uiRoot);
+  root.appendChild(rotate);
 
   const g = new Game(host, uiRoot);
   void g.start();
@@ -91,6 +99,13 @@ class Game {
         this.save.settings = s;
         writeSave(this.save);
         this.audio.setBuses(s.audio, s.music);
+        this.input.aimForward = s.aimForward;
+      },
+      onUndoPin: () => {
+        if (this.world && this.phase === 'aim' && this.world.pins.length > 0) {
+          undoPin(this.world);
+          this.audio.sfx('uiTick');
+        }
       },
     };
     this.ui = mountUI(this.uiRoot, hooks);
@@ -108,12 +123,18 @@ class Game {
       onHover: (sx, sy) => this.hoverGhost(sx, sy),
       onKey: (code) => this.key(code),
     });
+    this.input.aimForward = this.save.settings.aimForward;
 
     this.story.onLine((line) => this.ui.showSubtitle(line));
     this.audio.setBuses(this.save.settings.audio, this.save.settings.music);
     window.addEventListener('resize', () => this.renderer.resize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.world && !qa().get('nopause')) this.pause();
+    });
+    // auto-pause when a touch device is held in portrait mid-round
+    const portraitQuery = matchMedia('(orientation: portrait) and (pointer: coarse)');
+    portraitQuery.addEventListener?.('change', (e) => {
+      if (e.matches && this.world && !qa().get('nopause')) this.pause();
     });
 
     this.ui.showSubtitle = this.ui.showSubtitle.bind(this.ui);
@@ -211,6 +232,13 @@ class Game {
   }
 
   private key(code: string): void {
+    if (this.phase === 'results') {
+      if (code === 'Enter' || code === 'NumpadEnter') {
+        if (this.levelIdx + 1 < LEVELS.length) this.enterLevel(this.levelIdx + 1, this.modifiers);
+        else this.toMenu();
+      } else if (code === 'KeyR') this.restartLevel();
+      return;
+    }
     if (code === 'KeyR') this.restartLevel();
     else if (code === 'KeyP' || code === 'Escape') {
       if (this.phase === 'paused') this.resume();
@@ -387,7 +415,7 @@ class Game {
       return;
     }
     this.phase = 'strokeEndWait';
-    this.waitT = 0.9;
+    this.waitT = 0.45;
     const msg = reason === 'voided' ? 'LOST TO THE VOID' : reason === 'hazard' ? 'HAZARD' : 'SETTLED';
     this.ui.toast(msg, 'bad');
   }
@@ -415,6 +443,9 @@ class Game {
     if (this.modifiers.includes('TIME ATTACK')) {
       this.ui.toast(`TIME — ${this.levelTime.toFixed(1)}s`, 'good');
     }
+    const prevBest = this.save.bestTimes[id];
+    const isBest = this.levelTime > 1 && (prevBest === undefined || this.levelTime < prevBest);
+    if (isBest) this.save.bestTimes[id] = Math.round(this.levelTime * 10) / 10;
 
     const result: LevelResult = {
       levelId: id,
@@ -426,6 +457,8 @@ class Game {
       fragments: { total: w.fragments.length, taken },
       nextLevelId: this.levelIdx + 1 < LEVELS.length ? LEVELS[this.levelIdx + 1].id : null,
       modifiers: this.modifiers,
+      timeSec: Math.round(this.levelTime * 10) / 10,
+      bestSec: this.save.bestTimes[id] ?? prevBest,
     };
     this.ui.setResult(result);
     this.ui.show('results');
