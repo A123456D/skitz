@@ -43,10 +43,27 @@ export function bootGame(root: HTMLElement): void {
   rotate.id = 'ob-rotate';
   rotate.innerHTML =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#6fd6e8" stroke-width="1.6"><rect x="6" y="3" width="12" height="18" rx="2.5"/><circle cx="12" cy="18.4" r="1" fill="#6fd6e8" stroke="none"/></svg><p>Rotate to landscape</p>';
+  const fullscreen = document.createElement('button');
+  fullscreen.id = 'ob-fullscreen';
+  fullscreen.setAttribute('aria-label', 'Toggle fullscreen');
+  fullscreen.innerHTML =
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  fullscreen.addEventListener('click', () => {
+    const el = document.documentElement;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => {});
+    } else {
+      void el.requestFullscreen?.({ navigationUI: 'hide' }).then(() =>
+        // fullscreen unlocks programmatic orientation lock on Android
+        (screen.orientation as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {}),
+      ).catch(() => {});
+    }
+  });
   root.appendChild(host);
   root.appendChild(vignette);
   root.appendChild(uiRoot);
   root.appendChild(rotate);
+  root.appendChild(fullscreen);
 
   const g = new Game(host, uiRoot);
   void g.start();
@@ -159,6 +176,15 @@ class Game {
     if (this.unlockedAudio) return;
     this.unlockedAudio = true;
     void this.audio.unlock();
+    // strongest landscape enforcement available outside installed-PWA mode;
+    // silently unsupported on iOS Safari and desktop — the rotate overlay covers those
+    if (matchMedia('(pointer: coarse)').matches) {
+      try {
+        (screen.orientation as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {});
+      } catch {
+        // lock unavailable — rotate overlay remains the fallback
+      }
+    }
   }
 
   // ------------------------------------------------------------------ flow

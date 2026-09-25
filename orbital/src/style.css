@@ -47,6 +47,21 @@ canvas { display: block; }
 @keyframes ob-rot { 0%, 18% { transform: rotate(0); } 62%, 100% { transform: rotate(90deg); } }
 #ob-rotate p { color: var(--muted); letter-spacing: 0.3em; font-size: 12px; text-transform: uppercase; margin: 0; }
 
+/* Fullscreen toggle — touch devices only (desktop uses F11); enables
+   real orientation locking on Android + clean edges on notched phones */
+#ob-fullscreen { display: none; }
+@media (pointer: coarse) and (orientation: landscape) {
+  #ob-fullscreen {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: 48px; height: 48px; border-radius: 12px;
+    background: var(--panel); border: 1px solid rgba(232, 236, 244, 0.14);
+    color: var(--muted); z-index: 5; cursor: pointer;
+  }
+  #ob-fullscreen:active { color: var(--ink); border-color: rgba(232, 236, 244, 0.3); }
+}
+
 /* Boot overlay — replaced once the UI system mounts */
 #boot {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
