@@ -30,6 +30,8 @@ func setup(game_ref, type_: String, pos: Vector2, hp_scale: float) -> void:
 	r = def["r"]
 	xp = def["xp"]
 	body = SpriteLib.sprite(def["frames"][0], 0.9)
+	var bs: float = def.get("scale", 1.0)
+	body.scale = Vector2(bs, bs)
 	add_child(body)
 
 func _physics_process(dt: float) -> void:
@@ -65,8 +67,10 @@ func _physics_process(dt: float) -> void:
 	anim_t += dt * (6.0 if mv.length() > 4.0 else 2.0)
 	var frames: Array = def["frames"]
 	body.texture = SpriteLib.tex(frames[int(anim_t) % frames.size()])
+	var bs: float = def.get("scale", 1.0)
 	var sq := 1.0 + sin(t * 9.0) * 0.05
-	body.scale.y = 1.0 * (0.85 if flash > 0.05 else sq)
+	body.scale.y = bs * (0.85 if flash > 0.05 else sq)
+	body.scale.x = bs * (1.12 if flash > 0.05 else 1.0)
 	body.modulate = Color(1.6, 1.2, 1.1) if flash > 0.0 else Color.WHITE
 	# contact damage
 	if to_p.length() < r + 13.0 and p.iframes <= 0.0:

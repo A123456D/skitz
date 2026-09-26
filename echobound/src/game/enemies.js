@@ -9,16 +9,18 @@ import { addXp } from './player.js';
 import { SpatialHash, TAU, rand, irand, angTo, clamp } from '../core/util.js';
 
 export const ENEMY_DEF = {
-  husk:     { hp: 20, spd: 95,  dmg: 8, r: 13, xp: 1, cost: 1, spr: 'husk', fr: 4 },
-  lancer:   { hp: 26, spd: 82,  dmg: 7, r: 12, xp: 2, cost: 2, spr: 'lancer', fr: 4 },
-  mourner:  { hp: 60, spd: 46,  dmg: 6, r: 15, xp: 5, cost: 4, spr: 'mourner', fr: 4 },
+  // pack species (CC0 Dungeon Crawl Stone Soup tiles, 32px art) — drawn at own scale
+  husk:     { hp: 20, spd: 95,  dmg: 8, r: 15, xp: 1, cost: 1, spr: 'pk_husk', fr: 1, scale: 1.0 },
+  lancer:   { hp: 26, spd: 82,  dmg: 7, r: 15, xp: 2, cost: 2, spr: 'pk_lancer', fr: 1, scale: 1.05 },
+  mourner:  { hp: 60, spd: 46,  dmg: 6, r: 15, xp: 5, cost: 4, spr: 'pk_mourner', fr: 1, scale: 1.05 },
+  leech:    { hp: 24, spd: 110, dmg: 5, r: 11, xp: 2, cost: 3, spr: 'pk_leech', fr: 1, scale: 1.1 },
+  parasite: { hp: 36, spd: 125, dmg: 6, r: 12, xp: 4, cost: 4, spr: 'pk_parasite', fr: 1, scale: 1.1 },
+  witness:  { hp: 70, spd: 55,  dmg: 0, r: 13, xp: 6, cost: 5, spr: 'pk_witness', fr: 1, scale: 1.15 },
+  counter:  { hp: 80, spd: 70,  dmg: 10, r: 13, xp: 6, cost: 5, spr: 'pk_witness', fr: 1, scale: 1.15 },
+  // procedural species (own art, multi-frame)
   thief:    { hp: 30, spd: 155, dmg: 4, r: 11, xp: 3, cost: 2, spr: 'thief', fr: 4 },
-  leech:    { hp: 24, spd: 110, dmg: 5, r: 10, xp: 2, cost: 3, spr: 'leech', fr: 4 },
   mirror:   { hp: 44, spd: 70,  dmg: 6, r: 11, xp: 4, cost: 4, spr: 'mirror', fr: 2 },
   timeeater:{ hp: 90, spd: 85,  dmg: 8, r: 15, xp: 8, cost: 6, spr: 'timeeater', fr: 4 },
-  parasite: { hp: 36, spd: 125, dmg: 6, r: 11, xp: 4, cost: 4, spr: 'parasite', fr: 4 },
-  witness:  { hp: 70, spd: 55,  dmg: 0, r: 12, xp: 6, cost: 5, spr: 'witness', fr: 3 },
-  counter:  { hp: 80, spd: 70,  dmg: 10, r: 12, xp: 6, cost: 5, spr: 'witness', fr: 3 },
   clockadd: { hp: 14, spd: 175, dmg: 6, r: 9,  xp: 1, cost: 1, spr: 'clockadd', fr: 1 },
 };
 
@@ -27,10 +29,10 @@ export const ELITE_NAMES = { teleport: 'TELEPORTING', explosive: 'EXPLOSIVE', re
 
 // gib + splat colors per family (visual identity of remains)
 const FAMILY = {
-  husk: ['#c96a4a', '#43201a'], lancer: ['#b85a40', '#3c1e16'], mourner: ['#8a8f9c', '#23262e'],
-  thief: ['#d8a850', '#33260f'], leech: ['#c46a48', '#36180e'], mirror: ['#aab6c8', '#272d3a'],
-  timeeater: ['#c9a86b', '#33260f'], parasite: ['#d8a850', '#2c220d'], witness: ['#d8c9a8', '#332c20'],
-  counter: ['#ffb454', '#33200f'], clockadd: ['#c9a86b', '#2e2410'],
+  husk: ['#c9b493', '#43201a'], lancer: ['#d8c9a8', '#3c1e16'], mourner: ['#9a5ab0', '#2a1a30'],
+  thief: ['#d8a850', '#33260f'], leech: ['#d8a080', '#36180e'], mirror: ['#aab6c8', '#272d3a'],
+  timeeater: ['#c9a86b', '#33260f'], parasite: ['#b08ad8', '#2a2038'], witness: ['#8fb8d8', '#202830'],
+  counter: ['#8fb8d8', '#202830'], clockadd: ['#c9a86b', '#2e2410'],
 };
 
 export function hpScale() { const m = G.time / 60; return 1 + m * 0.35 + m * m * 0.045; }
@@ -38,7 +40,8 @@ export function dmgScale() { return 1 + (G.time / 60) * 0.055; }
 
 export function spawnEnemy(type, x, y, elite = null, opts = {}) {
   const d = ENEMY_DEF[type];
-  const sc = opts.scale ?? 1;
+  const baseScale = d.scale || 1;
+  const sc = (opts.scale ?? 1) * baseScale;
   const eliteMul = elite ? 2.6 : 1;
   const e = {
     id: G.nextId++, type, x, y, vx: 0, vy: 0, kbx: 0, kby: 0,
