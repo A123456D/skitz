@@ -17,6 +17,7 @@ import {
   expDamp,
   fitScale,
   hashSeed,
+  holeEdgeHint,
   mixRGB,
   speedRamp,
 } from '../src/render/core';
@@ -199,6 +200,75 @@ describe('mobile-first framing (phone landscape is canonical)', () => {
     // and between strokes the desktop contract still holds: eased back home
     for (let i = 0; i < 240; i++) phone.update(1 / 60, ball, false);
     expect(Math.abs(phone.cx)).toBeLessThan(1);
+  });
+});
+
+describe('off-screen hole hint geometry (pure core math)', () => {
+  const st = { show: false, x: 0, y: 0, angle: 0, metres: 0 };
+  const PAD = 34;
+  // L01-style camera: level center (1140,640), bounds 1600x470, desktop 1280x800
+  const S = fitScale(1280, 800, 1600, 470, 1.18);
+  const CX = 1140;
+  const CY = 640;
+  // world point that projects to a given screen position (shake-free inverse)
+  const world = (sx: number, sy: number): { hx: number; hy: number } => ({
+    hx: (sx - 640) / S + CX,
+    hy: (sy - 400) / S + CY,
+  });
+
+  it('never shows while the hole is on screen (reported L01 frame: screen 842,458)', () => {
+    const { hx, hy } = world(842, 458); // the exact live-play repro coordinates
+    holeEdgeHint(CX, CY, S, 1280, 800, hx, hy, 500, 530, PAD, st);
+    expect(st.show).toBe(false);
+    // anywhere comfortably inside the padded viewport stays hidden too
+    const mid = world(640, 400);
+    holeEdgeHint(CX, CY, S, 1280, 800, mid.hx, mid.hy, 500, 530, PAD, st);
+    expect(st.show).toBe(false);
+  });
+
+  it('pins to the edge and points toward the hole when it exits right', () => {
+    const { hx, hy } = world(1480, 400); // 234px past the right edge
+    const ball = { x: hx - 400, y: hy }; // 400 world units left of the hole
+    holeEdgeHint(CX, CY, S, 1280, 800, hx, hy, ball.x, ball.y, PAD, st);
+    expect(st.show).toBe(true);
+    expect(st.x).toBeCloseTo(1280 - PAD, 6);
+    expect(st.y).toBeCloseTo(400, 6);
+    expect(st.angle).toBeCloseTo(0, 6); // chevron points right, at the hole
+    expect(st.metres).toBe(40); // |ball->hole| = 400 world units / 10
+  });
+
+  it('points up-left when the hole exits through the top-left corner', () => {
+    const { hx, hy } = world(20, 25);
+    holeEdgeHint(CX, CY, S, 1280, 800, hx, hy, CX + 300, CY + 300, PAD, st);
+    expect(st.show).toBe(true);
+    expect(st.x).toBeCloseTo(PAD, 6);
+    expect(st.y).toBeCloseTo(PAD, 6);
+    expect(st.angle).toBeLessThan(-Math.PI / 2); // up-left quadrant
+    expect(st.angle).toBeGreaterThan(-Math.PI);
+  });
+
+  it('distance label is world/10 and never reads 0 while visible', () => {
+    const { hx, hy } = world(1500, 400);
+    holeEdgeHint(CX, CY, S, 1280, 800, hx, hy, hx - 2, hy, PAD, st); // 2 units apart
+    expect(st.show).toBe(true);
+    expect(st.metres).toBe(1); // 0.2 rounds to 0 — floored to 1
+  });
+
+  it('phone viewport (844x390) hides when hole visible, shows when pushed out', () => {
+    const sp = fitScale(844, 390, 1600, 470, 1.04);
+    const onScreen = world(700, 200);
+    holeEdgeHint(CX, CY, sp, 844, 390, onScreen.hx, onScreen.hy, 500, 530, PAD, st);
+    expect(st.show).toBe(false);
+    const pushedOut = world(1200, 400); // past the right edge, vertically centered
+    holeEdgeHint(CX, CY, sp, 844, 390, pushedOut.hx, pushedOut.hy, 500, 530, PAD, st);
+    expect(st.show).toBe(true);
+    expect(st.x).toBeCloseTo(844 - PAD, 6);
+    expect(st.angle).toBeCloseTo(0, 6);
+  });
+
+  it('non-finite input self-hides (NaN comparisons are false)', () => {
+    holeEdgeHint(CX, CY, S, 1280, 800, NaN, NaN, 500, 530, PAD, st);
+    expect(st.show).toBe(false);
   });
 });
 

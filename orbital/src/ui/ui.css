@@ -89,6 +89,10 @@
   color: var(--ink);
   line-height: 1;
 }
+/* legibility scrims over the live diorama — dark halo, not a drop shadow */
+.ob-wordmark, .ob-tagline, .ob-whisper {
+  text-shadow: 0 2px 14px rgba(2, 4, 10, 0.85), 0 0 3px rgba(2, 4, 10, 0.7);
+}
 .ob-tagline {
   margin-top: 14px;
   font-size: clamp(12px, 1.7vw, 16px);
@@ -151,9 +155,16 @@
 .ob-chip--primary:hover:not([disabled]) { border-color: var(--accent); color: #ffd9a0; }
 .ob-chip--ghost { min-height: 40px; padding: 0 16px; font-size: 11px; border-color: var(--ob-line-soft); }
 
-/* ------------------------------------------------------------------ TITLE */
-
-.ob-title { align-items: center; justify-content: center; }
+/* ------------------------------------------------------------------ TITLE
+   The integrator runs a live diorama level on the canvas behind the menus:
+   the scrim stays clearly translucent (diorama reads through) while dark
+   text-shadows keep the display type legible over bright pads. */
+.ob-title {
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 16, 0.60);
+}
+.ob-title .ob-stars, .ob-select .ob-stars { opacity: 0.28; } /* the canvas is the star now */
 .ob-title-core {
   display: flex;
   flex-direction: column;
@@ -183,11 +194,35 @@
   margin-top: 44px;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
 }
+/* PLAY stacked over DAILY TEE; SETTINGS rides beside the pair */
+.ob-title-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.ob-daily { gap: 9px; padding: 8px 16px; }
+.ob-daily-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.ob-daily-label { font-size: 11px; }
+.ob-daily-sub, .ob-daily-best {
+  font-family: var(--ob-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+.ob-daily-sub { color: var(--muted); }
+.ob-daily-best { color: var(--gravity); }
 
-/* ----------------------------------------------------------- COURSE SELECT */
-
-.ob-select { flex-direction: column; }
+/* ----------------------------------------------------------- COURSE SELECT
+   Heavier but still translucent scrim — the map needs more contrast than the
+   title, but the diorama must still ghost through. */
+.ob-select { flex-direction: column; background: rgba(5, 8, 16, 0.85); }
 .ob-select-head {
   display: flex;
   align-items: center;
@@ -200,6 +235,7 @@
   font-size: 17px;
   letter-spacing: 0.42em;
   text-indent: 0.06em;
+  text-shadow: 0 1px 10px rgba(2, 4, 10, 0.8);
 }
 .ob-select-sub {
   display: block;
@@ -423,10 +459,15 @@
 .ob-term--par { color: var(--ink); }
 .ob-term--over { color: var(--muted); }
 
-.ob-pins {
+.ob-bottomrow {
   position: absolute;
   bottom: calc(18px + env(safe-area-inset-bottom));
   left: calc(18px + env(safe-area-inset-left));
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.ob-pins {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -443,6 +484,29 @@
 .ob-pins-row { display: flex; gap: 8px; }
 .ob-tee { color: var(--accent); display: inline-flex; transition: opacity 0.25s, color 0.25s; }
 .ob-tee.is-spent { opacity: 0.18; color: var(--muted); }
+
+/* Boost gauge — mid-air nudges left. Accent while a boost stands, dimmed and
+   emptied at 0, hidden entirely until World.boostsLeft exists. */
+.ob-boost {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel);
+  border: 1px solid var(--ob-line-soft);
+  border-radius: 12px;
+  padding: 8px 13px;
+  color: var(--accent);
+  transition: opacity 0.4s, color 0.25s;
+}
+.ob-boost-glyph { display: inline-flex; }
+.ob-boost-count {
+  font-family: var(--ob-mono);
+  font-size: 14px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ob-boost.is-empty { color: var(--muted); opacity: 0.45; }
+.ob-boost.is-off { display: none; }
 
 .ob-status {
   position: absolute;
@@ -497,7 +561,8 @@
 /* minimal during flight */
 .ob-hud.is-flight .ob-pins,
 .ob-hud.is-flight .ob-objectives,
-.ob-hud.is-flight .ob-frags { opacity: 0.22; transition: opacity 0.4s; }
+.ob-hud.is-flight .ob-frags,
+.ob-hud.is-flight .ob-boost { opacity: 0.22; transition: opacity 0.4s; }
 .ob-pins, .ob-objectives, .ob-frags { transition: opacity 0.4s; }
 
 /* ------------------------------------------------------------------ PAUSE */
@@ -951,6 +1016,10 @@
   .ob-frags { padding: 7px 10px; }
   .ob-objectives { max-width: 230px; padding: 8px 12px; gap: 4px; }
   .ob-pausebtn { width: 44px; height: 44px; }
+  .ob-bottomrow { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .ob-boost { padding: 6px 10px; gap: 5px; }
+  .ob-boost-count { font-size: 12px; }
+  .ob-daily { min-height: 40px; padding: 6px 14px; }
   .ob-levelpill { max-width: 52vw; font-size: 9px; padding: 7px 16px; }
   .ob-subtitle {
     max-width: min(520px, 78vw);

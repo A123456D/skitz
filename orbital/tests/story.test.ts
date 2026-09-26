@@ -20,6 +20,7 @@ function makeWorld(over: Partial<World> = {}): World {
     gravityScale: 1,
     t: 0,
     strokes: 0,
+    boostsLeft: 1,
     ball: {
       x: 0, y: 0, vx: 0, vy: 0, flying: false, settled: false, dead: false,
       sunk: false, spin: 0, orbitBody: null, orbitAngleAcc: 0, slowTime: 0,

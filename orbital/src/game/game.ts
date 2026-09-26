@@ -2,7 +2,7 @@
 // Owns main.ts. Modules (render/ui/audio/story/levels) plug in via api files.
 
 import {
-  createWorld, startStroke, launch, placePin, undoPin, stepTick, drainEvents,
+  createWorld, startStroke, launch, placePin, undoPin, boost, stepTick, drainEvents,
   predict, STEP_DT, MAX_LAUNCH_SPEED,
 } from '../sim';
 import type { LevelDef, SimEvent, StrokeEndReason, World } from '../sim';
@@ -94,9 +94,15 @@ class Game {
   private sinkSlowT = 0;
   /** Consecutive non-sunk strokes on the current level (adaptive hints). */
   private dryStrokes = 0;
+  private runSeed = 1;
   /** Recorded flight path of the current/previous stroke (shot review). */
   private lastShot: { x: number; y: number }[] = [];
   private shotTick = 0;
+  /** Daily Tee mode: date-seeded level with its own record. */
+  private dailyMode = false;
+  /** The self-playing diorama behind the menus. */
+  private demoWorld: World | null = null;
+  private demoWait = 0;
 
   constructor(private host: HTMLElement, private uiRoot: HTMLElement) {
     const q = qa();
@@ -110,11 +116,16 @@ class Game {
 
     const hooks: UIHooks = {
       onPlayLevel: (idx, mods) => this.enterLevel(idx, mods),
+      onPlayDaily: () => this.playDaily(),
       onResume: () => this.resume(),
       onRestart: () => this.restartLevel(),
       onPause: () => this.pause(),
       onQuitToMenu: () => this.toMenu(),
       onNextLevel: () => {
+        if (this.dailyMode) {
+          this.toMenu();
+          return;
+        }
         if (this.levelIdx + 1 < LEVELS.length) this.enterLevel(this.levelIdx + 1, this.modifiers);
         else this.toMenu();
       },
@@ -171,6 +182,7 @@ class Game {
     this.phase = 'menu';
     this.lastT = performance.now();
     requestAnimationFrame((t) => this.loop(t));
+    this.spawnDemo();
 
     const levelParam = q.get('level');
     if (levelParam !== null) {
@@ -212,16 +224,19 @@ class Game {
 
   // ------------------------------------------------------------------ flow
 
-  private enterLevel(idx: number, mods: string[]): void {
+  private enterLevel(idx: number, mods: string[], opts?: { seed?: number; daily?: boolean }): void {
     this.levelIdx = idx;
     this.modifiers = mods;
+    this.dailyMode = opts?.daily === true;
+    const runSeed = opts?.seed ?? this.seed;
+    this.runSeed = runSeed;
     let def: LevelDef = structuredClone(LEVELS[idx]);
     if (mods.includes('PIN FAMINE')) def.pinBudget = Math.max(0, def.pinBudget - 1);
     if (mods.includes('ONE SHOT')) def.par = 1;
     let gravityScale = 1;
     for (const m of mods) if (MOD_GRAVITY[m]) gravityScale = MOD_GRAVITY[m];
 
-    this.world = createWorld(def, this.seed, gravityScale);
+    this.world = createWorld(def, runSeed, gravityScale);
     startStroke(this.world, true);
     this.phase = 'aim';
     this.hazardHappened = false;
@@ -246,10 +261,21 @@ class Game {
 
   private previewEnabled = true;
 
+  /** Date-seeded Daily Tee: same hole + modifier for everyone, every day. */
+  private playDaily(): void {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    const idx = dayOfYear % LEVELS.length;
+    const seed = (now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()) % 99991;
+    const mods = [['HEAVY'], ['DRIFTWOOD'], ['PIN FAMINE'], []][now.getDay() % 4] as string[];
+    this.enterLevel(idx, mods, { seed, daily: true });
+  }
+
   private restartLevel(): void {
     if (this.levelIdx < 0) return;
     this.resume();
-    this.enterLevel(this.levelIdx, this.modifiers);
+    this.enterLevel(this.levelIdx, this.modifiers, this.dailyMode ? { seed: this.runSeed, daily: true } : undefined);
   }
 
   private pause(): void {
@@ -275,6 +301,7 @@ class Game {
   private toMenu(): void {
     this.world = null;
     this.phase = 'menu';
+    this.dailyMode = false;
     this.input.cancelAll();
     this.input.enabled = false;
     this.ui.bindWorld(null);
@@ -282,6 +309,17 @@ class Game {
     this.ui.refresh(this.save, LEVELS);
     this.ui.show('title');
     (this.audio as unknown as { stopHum?: () => void }).stopHum?.();
+    this.spawnDemo();
+  }
+
+  /** Fresh self-playing diorama for the menus. */
+  private spawnDemo(): void {
+    const d = createWorld(LEVELS[0], 7, 1);
+    startStroke(d, true);
+    const rad = (-10 * Math.PI) / 180;
+    launch(d, Math.cos(rad), Math.sin(rad), 500);
+    this.demoWorld = d;
+    this.demoWait = 0;
   }
 
   private key(code: string): void {
@@ -328,8 +366,15 @@ class Game {
   }
 
   private tapPlacePin(sx: number, sy: number): void {
-    if (this.phase !== 'aim' || !this.world) return;
+    if (!this.world) return;
     const wpt = this.renderer.screenToWorld(sx, sy);
+    // mid-flight tap = boost toward the tap point (the mobile-first verb)
+    if (this.phase === 'flight') {
+      const b = this.world.ball;
+      boost(this.world, wpt.x - b.x, wpt.y - b.y);
+      return;
+    }
+    if (this.phase !== 'aim') return;
     placePin(this.world, wpt.x, wpt.y);
   }
 
@@ -353,6 +398,31 @@ class Game {
     requestAnimationFrame((tt) => this.loop(tt));
     const dt = Math.min(0.1, (t - this.lastT) / 1000);
     this.lastT = t;
+
+    // menu diorama: the course plays itself behind the UI
+    if (this.phase === 'menu') {
+      const d = this.demoWorld;
+      if (d) {
+        this.acc = Math.min(this.acc + dt, 0.25);
+        while (this.acc >= STEP_DT) {
+          this.acc -= STEP_DT;
+          stepTick(d);
+          drainEvents(d);
+        }
+        if (d.strokeEnded !== null) {
+          this.demoWait += dt;
+          if (this.demoWait > 1.6) {
+            this.demoWait = 0;
+            startStroke(d, true);
+            const rad = (-10 * Math.PI) / 180;
+            launch(d, Math.cos(rad), Math.sin(rad), 500);
+          }
+        }
+        this.renderer.syncWorld(d, dt);
+      }
+      return;
+    }
+
     const w = this.world;
     if (!w) return;
 
@@ -438,6 +508,15 @@ class Game {
           this.audio.sfx('hazard');
           this.hazardHappened = true;
           this.buzz([10, 30, 10], 0);
+          this.sinkSlowT = 0.5;
+          break;
+        case 'boost':
+          this.audio.sfx('launch', { pitch: 1.5, gain: 0.45 });
+          this.buzz(14, 120);
+          this.renderer.screenShake(0.12 * (this.save.settings.shake ? 1 : 0));
+          break;
+        case 'voided':
+          this.sinkSlowT = 0.5;
           break;
         case 'sink':
           this.audio.sfx('sink');
@@ -522,6 +601,19 @@ class Game {
     if (this.modifiers.includes('TIME ATTACK')) {
       this.ui.toast(`TIME — ${this.levelTime.toFixed(1)}s`, 'good');
     }
+    if (this.dailyMode) {
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const prev = this.save.daily;
+      const better =
+        !prev || prev.date !== dateKey || prev.levelId !== id ||
+        w.strokes < prev.strokes || (w.strokes === prev.strokes && this.levelTime < prev.time);
+      if (better) {
+        this.save.daily = {
+          date: dateKey, levelId: id,
+          strokes: w.strokes, time: Math.round(this.levelTime * 10) / 10,
+        };
+      }
+    }
     const prevBest = this.save.bestTimes[id];
     const isBest = this.levelTime > 1 && (prevBest === undefined || this.levelTime < prevBest);
     if (isBest) this.save.bestTimes[id] = Math.round(this.levelTime * 10) / 10;
@@ -534,7 +626,7 @@ class Game {
       medals,
       objectives: (def.objectives ?? []).map((o, i) => ({ text: o.text, done: objDone[i] })),
       fragments: { total: w.fragments.length, taken },
-      nextLevelId: this.levelIdx + 1 < LEVELS.length ? LEVELS[this.levelIdx + 1].id : null,
+      nextLevelId: !this.dailyMode && this.levelIdx + 1 < LEVELS.length ? LEVELS[this.levelIdx + 1].id : null,
       modifiers: this.modifiers,
       timeSec: Math.round(this.levelTime * 10) / 10,
       bestSec: this.save.bestTimes[id] ?? prevBest,

@@ -23,6 +23,8 @@ export interface LevelResult {
 
 export interface UIHooks {
   onPlayLevel(index: number, modifiers: string[]): void;
+  /** Title-screen Daily Tee: a date-seeded level + modifier combo. */
+  onPlayDaily?(): void;
   onResume(): void;
   onRestart(): void;
   onPause(): void;

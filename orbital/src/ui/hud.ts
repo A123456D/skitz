@@ -3,7 +3,7 @@
 import type { StoryLine, World } from '../sim';
 import { VOICES } from '../story/voices';
 import { el } from './dom';
-import { check, replay, shard, tee, teeSlash } from './glyphs';
+import { boost, check, replay, shard, tee, teeSlash } from './glyphs';
 import { strokeTerm, termPolarity } from './terms';
 
 export interface Hud {
@@ -45,8 +45,16 @@ export function buildHud(actions: HudActions): Hud {
   strokesRow.append(strokesNum, strokesPar);
   strokesBox.append(strokesRow, termChip);
 
-  // --- bottom-left: remaining pins as physical tee markers
+  // --- bottom-left: remaining pins as physical tee markers + mid-air boosts
   const pinsBox = el('div', 'ob-pins');
+  // Boost chip reads World.boostsLeft defensively (the integrator is adding
+  // it): hidden entirely until the field exists, dimmed/empty once spent.
+  const boostGlyphEl = el('span', 'ob-boost-glyph', boost(14));
+  const boostCount = el('span', 'ob-boost-count', '0');
+  const boostBox = el('div', 'ob-boost is-off');
+  boostBox.append(boostGlyphEl, boostCount);
+  const bottomRow = el('div', 'ob-bottomrow');
+  bottomRow.append(pinsBox, boostBox);
 
   // --- top-right: objectives chip, fragment pips, restart, undo pin, pause
   const objChip = el('div', 'ob-objectives');
@@ -76,7 +84,7 @@ export function buildHud(actions: HudActions): Hud {
   const status = el('div', 'ob-status');
   status.append(objChip, statusTop);
 
-  root.append(strokesBox, pinsBox, status);
+  root.append(strokesBox, bottomRow, status);
 
   // ------------------------------------------------------------- caches
 
@@ -88,6 +96,7 @@ export function buildHud(actions: HudActions): Hud {
   let objsKey = '';
   let flying = false;
   let undoKey = '';
+  let boostKey = '';
   let worldBound = false;
 
   /** Undo enablement = hook present AND at least one pin standing. */
@@ -242,6 +251,23 @@ export function buildHud(actions: HudActions): Hud {
       renderFrags(w);
       renderObjectives(w, objectiveDone);
       syncUndo(w);
+      // Boost count — read straight off the world, defensively: the sim may
+      // not carry boostsLeft yet (chip stays hidden until it does).
+      const boosts = (w as World & { boostsLeft?: number }).boostsLeft;
+      const bk =
+        typeof boosts === 'number' && Number.isFinite(boosts)
+          ? String(Math.max(0, Math.floor(boosts)))
+          : '';
+      if (bk !== boostKey) {
+        boostKey = bk;
+        if (!bk) {
+          boostBox.classList.add('is-off');
+        } else {
+          boostBox.classList.remove('is-off');
+          boostBox.classList.toggle('is-empty', bk === '0');
+          boostCount.textContent = bk;
+        }
+      }
       // Minimal HUD during flight: pins/objectives recede, score + pause stay.
       if (w.ball.flying !== flying) {
         flying = w.ball.flying;
@@ -268,6 +294,8 @@ export function buildHud(actions: HudActions): Hud {
       undoKey = '';
       undoBtn.disabled = true;
       undoBtn.classList.add('is-off');
+      boostKey = '';
+      boostBox.classList.add('is-off');
       // Fold the level pill and forget its level so re-entering the same hole
       // after quitting re-announces.
       levelKey = '';

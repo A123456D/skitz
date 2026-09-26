@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createWorld, startStroke, launch, placePin, stepTick, drainEvents,
+  createWorld, startStroke, launch, placePin, boost, stepTick, drainEvents,
   predict, sampleField, makeFieldSample,
 } from '../src/sim';
 import type { LevelDef, SimEvent } from '../src/sim';
@@ -320,6 +320,32 @@ describe('machinery + debris', () => {
     launch(w, 1, 0.02, 40); // ball airborne so debris physics matters, path well below the switch
     run(w, 2);
     expect(w.bodies[1].active).toBe(true);
+  });
+});
+
+describe('mid-air boost', () => {
+  it('nudges the flying ball once per stroke and refills on the next', () => {
+    const def = baseLevel({ hole: { x: 900, y: 300 } });
+    const w = createWorld(def, 1);
+    startStroke(w, true);
+    expect(w.boostsLeft).toBe(1);
+    launch(w, 1, 0, 200);
+    expect(boost(w, 0, -1)).toBe(true); // nudge upward
+    expect(w.boostsLeft).toBe(0);
+    expect(boost(w, 0, -1)).toBe(false); // spent
+    expect(w.ball.vy).toBeLessThan(-150); // ball is climbing
+    expect(drainEvents(w).some((e) => e.type === 'boost')).toBe(true);
+    // next stroke refills the budget
+    w.strokeEnded = 'settled';
+    startStroke(w);
+    expect(w.boostsLeft).toBe(1);
+  });
+
+  it('does nothing before launch', () => {
+    const w = createWorld(baseLevel({}), 1);
+    startStroke(w, true);
+    expect(boost(w, 1, 0)).toBe(false);
+    expect(w.boostsLeft).toBe(1);
   });
 });
 

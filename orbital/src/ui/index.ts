@@ -56,6 +56,9 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
       settingsFrom = 'title';
       show('settings');
     },
+    // Daily Tee mode is the integrator's optional onPlayDaily hook — clicked
+    // defensively so the chip is inert (but present) until it lands.
+    () => (hooks as { onPlayDaily?: () => void }).onPlayDaily?.(),
   );
   const select: SelectPane = buildSelect(
     () => show('title'),
@@ -92,7 +95,7 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
   // visible while the title screen is, and vanishes entirely when the event
   // never fires or the app already runs standalone.
   const install = buildInstallChip();
-  title.querySelector('.ob-title-actions')?.append(install.root);
+  title.root.querySelector('.ob-title-actions')?.append(install.root);
 
   // First-run gesture tutorial — self-contained overlay; the show() switcher
   // below is its only input, the sim never knows about it.
@@ -101,11 +104,11 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
     () => hx.onTutorialDone?.(),
   );
 
-  root.append(title, select.root, hud.root, pause, results.root, settings.root, tutorial.root);
+  root.append(title.root, select.root, hud.root, pause, results.root, settings.root, tutorial.root);
 
   // --- screen switching (UI-internal; the integrator can drive it too)
   const screens: Record<Exclude<Screen, 'boot' | 'playing'>, HTMLElement> = {
-    title,
+    title: title.root,
     select: select.root,
     paused: pause,
     results: results.root,
@@ -149,6 +152,7 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
     },
 
     refresh(save: SaveData, levels: LevelDef[]): void {
+      title.refresh(save);
       select.refresh(save, levels);
       settings.apply(save.settings);
     },

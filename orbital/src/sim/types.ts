@@ -157,6 +157,8 @@ export interface LevelDef {
   par: number;
   /** Max simultaneous Gravity Pins per stroke. */
   pinBudget: number;
+  /** Mid-air boosts per stroke (default 1 — tap during flight to nudge). */
+  boosts?: number;
   tee: Vec2;
   hole: HoleDef;
   /** Elliptical play area; leaving it for >1.5 s loses the ball to the void. */
@@ -249,6 +251,7 @@ export type StrokeEndReason = 'sunk' | 'settled' | 'hazard' | 'voided';
 
 export type SimEvent =
   | { type: 'launch'; x: number; y: number; vx: number; vy: number }
+  | { type: 'boost'; x: number; y: number; vx: number; vy: number }
   | { type: 'bounce'; x: number; y: number; speed: number }
   | { type: 'hazard'; x: number; y: number }
   | { type: 'sink'; x: number; y: number }
@@ -288,6 +291,7 @@ export interface World {
   holeSegTotal: number;
   strokes: number;
   pinsUsedTotal: number;
+  boostsLeft: number;
   orbits: number;
   strokeEnded: StrokeEndReason | null;
   events: SimEvent[];

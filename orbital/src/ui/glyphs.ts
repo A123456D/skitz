@@ -92,3 +92,7 @@ export const teeSlash = (s = 16, sw = 1.6): string =>
     '<path d="M4.5 4 L19.5 20"/>',
     s, sw,
   );
+
+/** Double chevron up — the mid-air "boost" gauge chip. */
+export const boost = (s = 14, sw = 2.2): string =>
+  wrap('<path d="M5 13.5 L12 7 L19 13.5 M5 19 L12 12.5 L19 19"/>', s, sw);

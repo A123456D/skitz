@@ -7,6 +7,7 @@ import type { LevelResult } from './api';
 import { button, div, el, esc } from './dom';
 import { back, check, flag, lock, next, play, replay, shard, sliders, spark, target } from './glyphs';
 import { MODIFIERS, REGIONS, strokeTerm, termPolarity } from './terms';
+import { tee } from './glyphs';
 
 // ------------------------------------------------------------ shared pieces
 
@@ -29,7 +30,24 @@ const ORBIT_SVG =
 
 // ------------------------------------------------------------------- TITLE
 
-export function buildTitle(onPlay: () => void, onSettings: () => void): HTMLElement {
+export interface TitlePane {
+  root: HTMLElement;
+  /** Sync the DAILY TEE chip from save data (the `daily` field is read defensively). */
+  refresh(save: SaveData): void;
+}
+
+/**
+ * DAILY TEE sits directly under PLAY. The integrator's daily mode lands as an
+ * optional `onPlayDaily` hook (click is a safe no-op until then) and an
+ * optional `daily` field on SaveData (save/save.ts is not ours to edit):
+ * `{ date: 'YYYY-MM-DD', levelId, modifier?, strokes? }`. Sub line reads
+ * "L11 · HEAVY"; once today's tee has been played it flips to the best score.
+ */
+export function buildTitle(
+  onPlay: () => void,
+  onSettings: () => void,
+  onDaily: () => void,
+): TitlePane {
   const root = el('section', 'ob-screen ob-title');
   root.append(buildStars());
   const core = div('ob-title-core');
@@ -37,15 +55,57 @@ export function buildTitle(onPlay: () => void, onSettings: () => void): HTMLElem
   core.append(el('h1', 'ob-wordmark', 'ORBITAL'));
   core.append(el('div', 'ob-tagline', 'THE&nbsp;LAST&nbsp;TEE'));
   const actions = div('ob-title-actions');
+  const mainCol = div('ob-title-main');
   const bPlay = button('ob-chip ob-chip--primary ob-int', `${play(14)}<span>PLAY</span>`);
-  const bSet = button('ob-chip ob-int', `${sliders(14)}<span>SETTINGS</span>`);
   bPlay.addEventListener('click', onPlay);
+  const bDaily = button('ob-chip ob-chip--ghost ob-int ob-daily', tee(13));
+  const dailyLabel = el('span', 'ob-daily-label', 'DAILY TEE');
+  const dailySub = el('span', 'ob-daily-sub');
+  const dailyBest = el('span', 'ob-daily-best');
+  dailySub.style.display = 'none';
+  dailyBest.style.display = 'none';
+  const dailyText = div('ob-daily-text');
+  dailyText.append(dailyLabel, dailySub, dailyBest);
+  bDaily.append(dailyText);
+  bDaily.addEventListener('click', onDaily);
+  mainCol.append(bPlay, bDaily);
+  const bSet = button('ob-chip ob-int', `${sliders(14)}<span>SETTINGS</span>`);
   bSet.addEventListener('click', onSettings);
-  actions.append(bPlay, bSet);
+  actions.append(mainCol, bSet);
   core.append(actions);
   core.append(el('div', 'ob-whisper', 'a course at the end of the universe'));
   root.append(core);
-  return root;
+
+  // Local calendar date as YYYY-MM-DD — the same shape the integrator formats
+  // into daily.date, but resolved in the player's own timezone.
+  const localToday = (): string => {
+    const d = new Date();
+    const p = (n: number): string => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+
+  return {
+    root,
+    refresh(sv: SaveData): void {
+      type DailyEx = { date?: string; levelId?: string; modifier?: string; strokes?: number };
+      const d: DailyEx | undefined = (sv as SaveData & { daily?: DailyEx }).daily;
+
+      const sub =
+        d && typeof d.levelId === 'string' && d.levelId
+          ? [d.levelId, d.modifier].filter((x) => typeof x === 'string' && x).join(' · ')
+          : '';
+      dailySub.textContent = sub;
+      dailySub.style.display = sub ? '' : 'none';
+
+      const n = d?.strokes;
+      let best = '';
+      if (d?.date === localToday() && typeof n === 'number' && n > 0) {
+        best = `BEST ${n} ${n === 1 ? 'STROKE' : 'STROKES'}`;
+      }
+      dailyBest.textContent = best;
+      dailyBest.style.display = best ? '' : 'none';
+    },
+  };
 }
 
 // ----------------------------------------------------------- COURSE SELECT

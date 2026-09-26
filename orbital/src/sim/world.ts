@@ -28,6 +28,7 @@ export const PIN_MU = 1.2e6;
 export const PIN_INFLUENCE_R = 260;
 export const MAX_LAUNCH_SPEED = 900;
 export const HOLE_CAPTURE_R = 30;
+export const BOOST_IMPULSE = 200;
 
 const f1: FieldSample = makeFieldSample();
 const f2: FieldSample = makeFieldSample();
@@ -99,6 +100,7 @@ export function createWorld(def: LevelDef, seed: number, gravityScale = 1): Worl
     holeSegTotal,
     strokes: 0,
     pinsUsedTotal: 0,
+    boostsLeft: def.boosts ?? 1,
     orbits: 0,
     strokeEnded: null,
     events: [],
@@ -133,6 +135,7 @@ export function startStroke(w: World, toTee = false): void {
   w.orbitPrevAngle = null;
   w.strokeEnded = null;
   w.pins.length = 0;
+  w.boostsLeft = w.def.boosts ?? 1;
 }
 
 export function launch(w: World, nx: number, ny: number, speed: number): void {
@@ -170,6 +173,24 @@ export function placePin(w: World, x: number, y: number): boolean {
 
 export function undoPin(w: World): void {
   w.pins.pop();
+}
+
+/** Mid-air boost: one per stroke by default. Tapping during flight nudges the
+ *  ball toward the tap point — a new shot verb, not a correction crutch. */
+export function boost(w: World, dirx: number, diry: number): boolean {
+  const b = w.ball;
+  if (!b.flying || b.dead || b.sunk || w.boostsLeft <= 0) return false;
+  const l = Math.hypot(dirx, diry) || 1;
+  b.vx += (dirx / l) * BOOST_IMPULSE;
+  b.vy += (diry / l) * BOOST_IMPULSE;
+  const sp = Math.hypot(b.vx, b.vy);
+  if (sp > MAX_LAUNCH_SPEED) {
+    b.vx = (b.vx / sp) * MAX_LAUNCH_SPEED;
+    b.vy = (b.vy / sp) * MAX_LAUNCH_SPEED;
+  }
+  w.boostsLeft--;
+  w.events.push({ type: 'boost', x: b.x, y: b.y, vx: b.vx, vy: b.vy });
+  return true;
 }
 
 export function drainEvents(w: World): SimEvent[] {

@@ -23,6 +23,8 @@ export interface SaveData {
   settings: Settings;
   /** Best completion time per level id, seconds. */
   bestTimes: Record<string, number>;
+  /** Today's Daily Tee record, if played. */
+  daily?: { date: string; levelId: string; strokes: number; time: number };
 }
 
 const DEFAULTS: SaveData = {

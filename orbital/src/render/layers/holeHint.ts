@@ -2,14 +2,17 @@
 // (constant on phones mid-flight, where the tight follow camera regularly
 // pushes the green out of frame). A green chevron pinned to the viewport edge
 // pointing at the hole, with a tiny mono distance read-out underneath
-// ("metres-ish" = world units / 10). Eases in within ~2s of the hole leaving
-// view, fades when it returns. Driven purely by syncWorld — results/menu
-// states never render through syncWorld, so the hint can never show there.
-// Pooled: the label only rewrites when the rounded value changes.
+// ("metres-ish" = world units / 10, floored at 1). Eases in within ~2s of the
+// hole leaving view, fades when it returns. Driven purely by syncWorld —
+// results/menu states never render through syncWorld, so it can never show
+// there. All geometry comes from the pure holeEdgeHint() in core.ts, which
+// projects the hole with the SAME camera pan/zoom the world is rendered with
+// (shake-stripped); the layer only eases/applies the result. Pooled: the
+// label only rewrites when the rounded value changes.
 
 import { Container, Sprite, Text } from 'pixi.js';
 import type { Camera } from '../camera';
-import { clamp, expDamp, mixRGB } from '../core';
+import { expDamp, holeEdgeHint, mixRGB, type HoleHintState } from '../core';
 import { GREEN, TexFactory } from '../textures';
 
 const EDGE_PAD = 34;      // chevron center inset from the viewport edge
@@ -25,7 +28,7 @@ export class HoleHintLayer {
   private x = 0;
   private y = 0;
   private lastMetres = -1;
-  private pt = { x: 0, y: 0 };
+  private state: HoleHintState = { show: false, x: 0, y: 0, angle: 0, metres: 0 };
 
   constructor(tex: TexFactory) {
     this.container.visible = false;
@@ -50,34 +53,35 @@ export class HoleHintLayer {
   /** Force-hide without waiting for the ease-out (level load). */
   reset(): void {
     this.alpha = 0;
+    this.x = 0;
+    this.y = 0;
     this.container.visible = false;
     this.lastMetres = -1;
   }
 
   /**
-   * Per-frame: derives everything from the live hole position. Cheap enough
-   * to run every syncWorld call; allocations only when the metres value ticks.
+   * Per-frame: project the live hole through the camera's render transform,
+   * ease the chevron in/out. Zero-alloc except the label string when the
+   * rounded metres value ticks.
    */
   update(dt: number, cam: Camera, holeX: number, holeY: number, ballX: number, ballY: number): void {
-    cam.worldToScreen(holeX, holeY, this.pt);
-    const off = this.pt.x < EDGE_PAD || this.pt.x > cam.viewW - EDGE_PAD
-      || this.pt.y < EDGE_PAD || this.pt.y > cam.viewH - EDGE_PAD;
-    const target = off ? 1 : 0;
+    // Same transform as applyToRoot/worldToScreen: s = (world - cam) * scale + view/2
+    holeEdgeHint(cam.cx, cam.cy, cam.scale, cam.viewW, cam.viewH,
+      holeX, holeY, ballX, ballY, EDGE_PAD, this.state);
+    const target = this.state.show ? 1 : 0;
     this.alpha = expDamp(this.alpha, target, target ? EASE_IN_RATE : EASE_OUT_RATE, dt);
     this.container.visible = this.alpha > 0.02;
     if (!this.container.visible) return;
 
-    this.x = expDamp(this.x, clamp(this.pt.x, EDGE_PAD, cam.viewW - EDGE_PAD), SLIDE_RATE, dt);
-    this.y = expDamp(this.y, clamp(this.pt.y, EDGE_PAD, cam.viewH - EDGE_PAD), SLIDE_RATE, dt);
+    this.x = expDamp(this.x, this.state.x, SLIDE_RATE, dt);
+    this.y = expDamp(this.y, this.state.y, SLIDE_RATE, dt);
     this.container.position.set(this.x, this.y);
     this.container.alpha = this.alpha;
-    // chevron points along the hole's screen direction from viewport center
-    this.arrow.rotation = Math.atan2(this.pt.y - cam.viewH * 0.5, this.pt.x - cam.viewW * 0.5);
+    this.arrow.rotation = this.state.angle;
 
-    const metres = Math.round(Math.hypot(holeX - ballX, holeY - ballY) / 10);
-    if (metres !== this.lastMetres) {
-      this.lastMetres = metres;
-      this.label.text = `${metres}m`;
+    if (this.state.metres !== this.lastMetres) {
+      this.lastMetres = this.state.metres;
+      this.label.text = `${this.state.metres}m`;
     }
   }
 }

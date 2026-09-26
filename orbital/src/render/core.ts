@@ -150,6 +150,48 @@ export function capToEllipse(dx: number, dy: number, rx: number, ry: number, out
   return out;
 }
 
+/**
+ * Pure geometry for the off-screen hole indicator (layers/holeHint.ts).
+ *
+ * The hole's SCREEN position is derived with exactly the same pan/zoom the
+ * renderer applies (applyToRoot/worldToScreen algebra, shake stripped for
+ * stability): s = (world - camCenter) * scale + view/2. `show` is true only
+ * when that projected point sits outside the edge-padded viewport rect; the
+ * edge pin keeps the chevron on-screen and `angle` points from the viewport
+ * center toward the hole's TRUE projected position (so the arrow aims the
+ * right way even while pinned). `metres` is round(|ball->hole| world / 10),
+ * floored at 1 — it must never read 0 while visible.
+ *
+ * Non-finite inputs self-hide (NaN comparisons are all false). Zero alloc:
+ * writes into `out`, returns it.
+ */
+export interface HoleHintState { show: boolean; x: number; y: number; angle: number; metres: number }
+
+export function holeEdgeHint(
+  camCx: number, camCy: number, camScale: number, viewW: number, viewH: number,
+  holeX: number, holeY: number, ballX: number, ballY: number,
+  edgePad: number, out: HoleHintState,
+): HoleHintState {
+  const sx = (holeX - camCx) * camScale + viewW * 0.5;
+  const sy = (holeY - camCy) * camScale + viewH * 0.5;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy)) {
+    out.show = false; // bad input (uninitialized world, NaN coords) — stay hidden
+    return out;
+  }
+  const hiX = viewW - edgePad;
+  const hiY = viewH - edgePad;
+  if (sx >= edgePad && sx <= hiX && sy >= edgePad && sy <= hiY) {
+    out.show = false; // hole is on screen — nothing to point at
+    return out;
+  }
+  out.show = true;
+  out.x = clamp(sx, edgePad, hiX);
+  out.y = clamp(sy, edgePad, hiY);
+  out.angle = Math.atan2(sy - viewH * 0.5, sx - viewW * 0.5);
+  out.metres = Math.max(1, Math.round(Math.hypot(holeX - ballX, holeY - ballY) / 10));
+  return out;
+}
+
 /** Exponential decay for screen shake magnitude; snaps to 0 below epsilon. */
 export function decayShake(mag: number, dt: number): number {
   const m = mag * Math.exp(-5.5 * dt);
