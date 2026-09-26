@@ -89,7 +89,7 @@ export function fireOnce(sh) {
     });
   }
   if (sh.src === 'p') {
-    FX.burst(sh.x + Math.cos(sh.aim) * 20, sh.y + Math.sin(sh.aim) * 20, 2, { col: '#bfe9ff', spd: 60, life: 0.15, size: 1.6 });
+    FX.flashSpr(sh.x + Math.cos(sh.aim) * 22, sh.y + Math.sin(sh.aim) * 22, 'muzzle', sh.aim, 1.2);
     A.sfx(sh.weapon === 'grave' ? 'shoot_gc' : 'shoot_widow');
   } else if (sh.src === 'echo') A.sfx('shoot_widow');
   G.profile.shots += n;
@@ -204,9 +204,10 @@ export function updateBullets(dt) {
       if (best) { const a = angTo(b.x, b.y, best.x, best.y), sp = Math.hypot(b.vx, b.vy); b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp; }
     }
     b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.sprite === 'gcball') b.rot += 7 * dt;
     if (b.life <= 0) { killBullet(i, b); continue; }
     if (Math.abs(b.x) > G.env.half + 60 || Math.abs(b.y) > G.env.half + 60) { killBullet(i, b); continue; }
-    if (Math.random() < 0.35) FX.trailDot(b.x, b.y, b.src === 'echo' ? '#54e6ff' : b.team ? '#ff8a5a' : '#bfe9ff', b.r * 0.5, 0.16);
+    if (Math.random() < 0.2) FX.trailDot(b.x, b.y, b.src === 'echo' ? '#54e6ff' : b.team ? '#ff8a5a' : '#bfe9ff', b.r * 0.35, 0.14);
 
     if (b.team === 0) {
       // environment: barrels/cars/barricades soak the shot; lightning can overload generators
@@ -248,7 +249,15 @@ export function playerHurt(dmg) {
   FX.burst(P.x, P.y, 8, { col: '#ff5a5a', spd: 140, life: 0.4 });
   if (P.hp <= 0) {
     if (P.secondWind) { P.secondWind = false; P.hp = P.maxHp * 0.5; P.iT = 1.5; FX.flash(0.4, '#7dff9b'); FX.ring(P.x, P.y, 120, '#7dff9b'); A.sfx('levelup'); }
-    else { P.hp = 0; P.alive = false; }
+    else {
+      P.hp = 0; P.alive = false;
+      // death sequence: the Warden comes apart
+      FX.gibs(P.x, P.y - 8, 22, '#7de6ff');
+      FX.burst(P.x, P.y, 24, { col: '#54e6ff', spd: 320, life: 0.8 });
+      FX.ring(P.x, P.y, 140, '#54e6ff');
+      FX.flash(0.5, '#54e6ff'); FX.shake(0.9); FX.slowmo(1.4); FX.hitstop(0.12);
+      A.sfx('boom');
+    }
   }
 }
 
@@ -257,5 +266,21 @@ export function drawBeams(R) {
     const mx = bm.x + Math.cos(bm.ang) * bm.len / 2, my = bm.y + Math.sin(bm.ang) * bm.len / 2;
     R.q('beam', mx, my, { rot: bm.ang, sx: bm.len / (32 * 3), sy: bm.w / (8 * 3), tint: bm.col, alpha: 0.85, layer: 9 });
     R.q('beam', mx, my, { rot: bm.ang, sx: bm.len / (32 * 3), sy: bm.w * 2.4 / (8 * 3), tint: bm.col, alpha: 0.25, layer: 9 });
+  }
+}
+
+// layered projectiles: motion trail -> glow -> readable core
+export function drawBullets(R) {
+  for (const b of G.bullets) {
+    const enemy = b.team === 1;
+    const col = enemy ? '#ff8a5a' : b.src === 'echo' ? '#54e6ff' : '#bfe9ff';
+    const sp = Math.hypot(b.vx, b.vy);
+    if (sp > 40) {
+      const tx = b.x - b.vx / sp * b.r * 2.4, ty = b.y - b.vy / sp * b.r * 2.4;
+      R.q('beam', (b.x + tx) / 2, (b.y + ty) / 2, { rot: Math.atan2(b.vy, b.vx), sx: b.r * 2.4 / (32 * 3) + 0.08, sy: b.r / (10 * 3), tint: col, alpha: 0.3, layer: 8 });
+    }
+    R.q('glow', b.x, b.y, { sx: b.r * 1.7 / (64 * 3), sy: b.r * 1.7 / (64 * 3), tint: enemy ? '#ff5a3a' : col, alpha: enemy ? 0.22 : 0.15, layer: 9 });
+    const pulse = enemy ? 1 + Math.sin(G.time * 20 + b.x) * 0.12 : 1;
+    R.q(b.sprite, b.x, b.y, { rot: b.rot || 0, sx: b.size * pulse, sy: b.size * pulse, layer: 8 });
   }
 }

@@ -43,7 +43,7 @@ export function resetRun(opts = {}) {
   };
   G.rec = { frames: [], max: ECHO_PERIOD };
   G.echoes = [];
-  G.enemies = []; G.bullets = []; G.pickups = []; G.props = []; G.wisps = []; G.wells = []; G.zones = []; G.beams = []; G.lances = [];
+  G.enemies = []; G.bullets = []; G.pickups = []; G.props = []; G.wisps = []; G.wells = []; G.zones = []; G.beams = []; G.lances = []; G.gdecals = []; G.arcs = []; G.spawnQueue = [];
   G.boss = null;
   G.director = { budget: 0, spawnT: 0, phase: 0, intensity: 1, eventT: 20, event: null, boss1Done: false, boss2Done: false, saintDue: 390, hkDue: 750, nospawn: G.Q.has('nospawn') };
   if (G.Q.get('boss') === 'saint') { G.director.saintDue = 2; G.director.hkDue = 99999; }

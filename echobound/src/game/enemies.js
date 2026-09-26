@@ -25,6 +25,14 @@ export const ENEMY_DEF = {
 const ELITES = ['teleport', 'explosive', 'reflective', 'regen', 'split', 'phase', 'echothief'];
 export const ELITE_NAMES = { teleport: 'TELEPORTING', explosive: 'EXPLOSIVE', reflective: 'REFLECTIVE', regen: 'REGENERATING', split: 'SPLITTING', phase: 'PHASED', echothief: 'ECHOTHIEF' };
 
+// gib + splat colors per family (visual identity of remains)
+const FAMILY = {
+  husk: ['#c96a4a', '#43201a'], lancer: ['#b85a40', '#3c1e16'], mourner: ['#8a8f9c', '#23262e'],
+  thief: ['#d8a850', '#33260f'], leech: ['#c46a48', '#36180e'], mirror: ['#aab6c8', '#272d3a'],
+  timeeater: ['#c9a86b', '#33260f'], parasite: ['#d8a850', '#2c220d'], witness: ['#d8c9a8', '#332c20'],
+  counter: ['#ffb454', '#33200f'], clockadd: ['#c9a86b', '#2e2410'],
+};
+
 export function hpScale() { const m = G.time / 60; return 1 + m * 0.35 + m * m * 0.045; }
 export function dmgScale() { return 1 + (G.time / 60) * 0.055; }
 
@@ -42,7 +50,7 @@ export function spawnEnemy(type, x, y, elite = null, opts = {}) {
     spr: d.spr, scale: (elite ? 1.25 : 1) * sc,
     elite, t: 0, stT: rand(0, 2), state: 'chase', flash: 0, dead: false,
     dots: { burn: 0, bleed: 0, poison: 0 }, dotT: { burn: 0, bleed: 0, poison: 0 }, dotSrc: {},
-    marked: 0, buffed: false, facing: 1, observeT: 0, shield: 0,
+    marked: 0, buffed: false, facing: 1, observeT: 0, shield: 0, hitT: 0, spawnT: 0.22,
     critRes: 0, echoRes: 0, burnImmune: false, boss: false, stolen: 0,
   };
   e.maxHp = e.hp;
@@ -71,6 +79,8 @@ export function updateEnemies(dt) {
     e.t += dt;
     e.flash = Math.max(0, e.flash - dt);
     e.marked = Math.max(0, e.marked - dt);
+    e.hitT = Math.max(0, e.hitT - dt);
+    if (e.spawnT > 0) e.spawnT -= dt;
     // dots
     for (const k of ['burn', 'bleed', 'poison']) {
       if (e.dotT[k] > 0) {
@@ -297,7 +307,7 @@ export function hurt(e, amt, o = {}) {
     spawnEnemyBullet(b.x, b.y, Math.atan2(b.vy, b.vx) + Math.PI, Math.hypot(b.vx, b.vy), b.dmg * 0.6, 'orb', 5);
     a *= 0.15;
   }
-  e.hp -= a; e.flash = 0.09;
+  e.hp -= a; e.flash = 0.09; e.hitT = 0.11;
   if (o.src === 'echo') { G.stats.dmgE += a; G.profile.echo += a; } else G.stats.dmgP += a;
   if (!o.silent) {
     FX.num(e.x, e.y - e.r - 8, a, o.crit);
@@ -351,6 +361,9 @@ function die(e, o = {}) {
   if ((e.elite && Math.random() < 0.18) || (e.type === 'witness' && Math.random() < 0.4)) G.pickups.push({ kind: 'story', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, pull: false });
   // feedback
   const big = e.boss || e.elite || bigSet.has(e.type);
+  const fam = FAMILY[e.type] || ['#c96a4a', '#43201a'];
+  FX.gibs(e.x, e.y - 6, big ? 14 : 6, fam[0]);
+  FX.splat(e.x, e.y + 4, fam[1], big ? 1.5 : 1);
   FX.burst(e.x, e.y, big ? 20 : 9, { col: big ? '#ff8a4a' : '#c96a4a', spd: big ? 260 : 150, life: 0.45, size: big ? 3 : 2 });
   FX.puff(e.x, e.y, big ? 8 : 4);
   A.sfx(big ? 'crack' : 'pop');
@@ -445,14 +458,27 @@ function updateWells(dt) {
 
 // ==================== DRAW ====================
 export function drawEnemies(R) {
+  // incoming-spawn warning runes
+  for (const s of G.spawnQueue) {
+    const p = 1 - s.t / 0.65;
+    const sc = (20 + p * 16) * 2 / (64 * 3);
+    R.q('rune', s.x, s.y, { sx: sc, sy: sc, alpha: 0.35 + p * 0.45 + Math.sin(G.time * 16) * 0.1, layer: 6 });
+  }
   for (const e of G.enemies) {
     if (e.dead) continue;
     const y = e.y;
-    R.q('shadow', e.x, y + e.r * 0.85, { sx: e.r * 2 / 40, sy: e.r / 30, alpha: 0.24, layer: 6 });
+    const spawnA = e.spawnT > 0 ? 1 - e.spawnT / 0.22 : 1;
+    R.q('shadow', e.x, y + e.r * 0.85, { sx: e.r * 2 / 40, sy: e.r / 30, alpha: 0.24 * spawnA, layer: 6 });
     let tint = e.buffed ? '#d8b8ff' : '#ffffff';
     if (e.flash > 0) tint = '#ffc8b8';
-    const bob = Math.sin(e.t * 8 + e.id) * (Math.hypot(e.kbx, e.kby) > 5 ? 0 : 1.2);
-    R.q(e.spr, e.x, y + bob, { sx: e.facing * e.scale, sy: e.scale, ay: 0.9, tint, layer: 7 });
+    // animation language: leg frames for walkers, squash-bob for floaters, hit punch on damage
+    let sprName = e.spr;
+    if (e.type === 'husk' || e.type === 'lancer' || e.type === 'thief') sprName += Math.floor(e.t * 7 + e.id) % 2;
+    const sq = 1 + Math.sin(e.t * 9 + e.id) * 0.05;
+    const px = e.hitT > 0 ? 1 + e.hitT * 1.1 : 1;
+    const py = e.hitT > 0 ? 1 - e.hitT * 1.6 : sq;
+    const bob = Math.sin(e.t * 8 + e.id) * 1.2;
+    R.q(sprName, e.x, y + bob, { sx: e.facing * e.scale * px, sy: e.scale * py, ay: 0.9, tint, alpha: spawnA, layer: 7 });
     if (e.flash > 0) R.q('glow', e.x, y - 8, { sx: e.r * 2.4 / 64 / 3, sy: e.r * 2.4 / 64 / 3, tint: '#ffffff', alpha: 0.5, layer: 9 });
     if (e.elite) {
       const pu = 0.5 + Math.sin(G.time * 4) * 0.2;

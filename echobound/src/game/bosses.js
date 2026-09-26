@@ -26,23 +26,36 @@ function bossBase(type, x, y, hp) {
   return e;
 }
 
+// bosses announce themselves: a ground sigil burns for 1.2s before the boss materializes
 export function spawnSaint() {
-  const e = bossBase('saint', G.player.x + Math.cos(rand(0, TAU)) * 500, G.player.y + Math.sin(rand(0, TAU)) * 500, 4200);
-  G.boss = e;
+  G.bossIncoming = { type: 'saint', t: 1.2 };
   banner('THE CLOCKWORK SAINT', 'IT REMEMBERS EVERY LOOP');
-  A.sfx('boss'); A.setBoss(true);
-  FX.shake(0.6); FX.flash(0.3, '#ffd75e');
+  A.sfx('boss');
+  FX.shake(0.4);
+  return null;
+}
+function doSpawnSaint() {
+  const e = bossBase('saint', G.player.x + Math.cos(rand(0, TAU)) * 460, G.player.y + Math.sin(rand(0, TAU)) * 460, 4200);
+  G.boss = e;
+  A.setBoss(true);
+  FX.flash(0.3, '#ffd75e'); FX.shake(0.6); FX.ring(e.x, e.y, 200, '#ffd75e');
   return e;
 }
 
 export function spawnHK() {
-  const e = bossBase('hk', G.player.x + Math.cos(rand(0, TAU)) * 520, G.player.y + Math.sin(rand(0, TAU)) * 520, 3400);
-  e.res = 0;
-  G.boss = e;
+  G.bossIncoming = { type: 'hk', t: 1.2 };
   banner('THE HOLLOW KING', '"YOU HAVE KILLED ME HUNDREDS OF TIMES."');
   META.event('hk_seen');
-  A.sfx('boss'); A.setBoss(true);
-  FX.shake(0.7); FX.flash(0.35, '#ff5a5a');
+  A.sfx('boss');
+  FX.shake(0.5);
+  return null;
+}
+function doSpawnHK() {
+  const e = bossBase('hk', G.player.x + Math.cos(rand(0, TAU)) * 480, G.player.y + Math.sin(rand(0, TAU)) * 480, 3400);
+  e.res = 0;
+  G.boss = e;
+  A.setBoss(true);
+  FX.flash(0.35, '#ff5a5a'); FX.shake(0.7); FX.ring(e.x, e.y, 220, '#ff5a5a');
   return e;
 }
 
@@ -94,8 +107,19 @@ function dialogue() {
 }
 
 export function updateBoss(dt) {
+  updateZones(dt);
+  updateLances(dt);
+  if (G.bossIncoming) {
+    const bi = G.bossIncoming;
+    bi.t -= dt;
+    if (bi.t <= 0) {
+      G.bossIncoming = null;
+      if (bi.type === 'saint') doSpawnSaint(); else doSpawnHK();
+    }
+    return;
+  }
   const e = G.boss;
-  if (!e || e.dead) { updateZones(dt); updateLances(dt); return; }
+  if (!e || e.dead) return;
   if (e.invulnT > 0) e.invulnT -= dt;
   e.t += dt; e.flash = Math.max(0, e.flash - dt);
   const P = G.player;
@@ -243,6 +267,17 @@ function updateLances(dt) {
 }
 
 export function drawBossExtras(R) {
+  // incoming boss sigil: converging rings + burning ground mark
+  if (G.bossIncoming) {
+    const bi = G.bossIncoming;
+    const p = 1 - bi.t / 1.2;
+    const col = bi.type === 'saint' ? '#ffd75e' : '#ff5a5a';
+    for (let i = 0; i < 3; i++) {
+      const rr = (1 - ((p + i * 0.33) % 1)) * 240 + 50;
+      R.q('ring', G.player.x, G.player.y, { sx: rr * 2 / (64 * 3), sy: rr * 2 / (64 * 3), tint: col, alpha: 0.5 * (1 - p * 0.5), layer: 8 });
+    }
+    R.q('well', G.player.x, G.player.y, { sx: (60 + p * 130) / (48 * 3), sy: (60 + p * 130) / (48 * 3), tint: col, alpha: 0.4 + Math.sin(G.time * 14) * 0.15, rot: G.time * 3, layer: 8 });
+  }
   // time-stop zones
   for (const z of G.zones) {
     const a = z.active ? 0.16 + Math.sin(G.time * 6) * 0.05 : 0.1 + Math.sin(G.time * 10) * 0.08;

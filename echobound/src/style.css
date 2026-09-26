@@ -75,9 +75,17 @@ h1,h2,h3{font-weight:900;letter-spacing:.06em}
 .lu-title{font-family:var(--mono);letter-spacing:.5em;font-size:14px;color:var(--cyan);margin-bottom:4px;text-transform:uppercase}
 .lu-sub{font-size:12px;color:var(--dim);letter-spacing:.2em;margin-bottom:18px}
 .cards{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.card{width:min(240px,28vw);min-width:200px;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--cat,#54e6ff);
-  padding:16px 14px 14px;cursor:pointer;text-align:left;transition:transform .1s, border-color .1s, box-shadow .1s;position:relative}
-.card:hover{transform:translateY(-4px);border-color:var(--cat,#54e6ff);box-shadow:0 8px 30px #0008, 0 0 20px var(--catc,#54e6ff22)}
+.card{width:min(240px,28vw);min-width:200px;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--rarb,#54e6ff);
+  padding:16px 14px 14px;cursor:pointer;text-align:left;transition:transform .1s, border-color .1s, box-shadow .1s;position:relative;
+  animation:cardin .4s cubic-bezier(.18,1.35,.4,1) backwards}
+.card:nth-child(2){animation-delay:.07s}
+.card:nth-child(3){animation-delay:.14s}
+@keyframes cardin{from{opacity:0;transform:translateY(22px) scale(.95)}}
+.card:hover{transform:translateY(-4px);border-color:var(--rarb,#54e6ff);box-shadow:0 8px 30px #0008, 0 0 20px var(--catc,#54e6ff22)}
+.rarity{font-family:var(--mono);font-size:9px;letter-spacing:.28em;margin-top:8px}
+.rar-common{color:#7a849c}
+.rar-rare{color:var(--mag);text-shadow:0 0 10px #ff5ad255}
+.rar-epic{color:var(--gold);text-shadow:0 0 12px #ffd75e66}
 .card .cat{font-family:var(--mono);font-size:10px;letter-spacing:.3em;color:var(--cat,#54e6ff)}
 .card .nm{font-weight:900;font-size:17px;margin:6px 0 8px;letter-spacing:.03em}
 .card .ds{font-size:12px;color:#aeb6c8;line-height:1.5;min-height:54px}

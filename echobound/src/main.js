@@ -9,8 +9,8 @@ import { FX } from './game/fx.js';
 import { META } from './game/meta.js';
 import { updatePlayer, drawPlayer, updateOrbit } from './game/player.js';
 import { tickRecorder } from './game/echo.js';
-import { updateEnemies, drawEnemies, hurt } from './game/enemies.js';
-import { updateBullets, drawBeams } from './game/weapons.js';
+import { updateEnemies, drawEnemies, hurt, spawnEnemy } from './game/enemies.js';
+import { updateBullets, drawBullets, drawBeams } from './game/weapons.js';
 import { updateEchoes, drawEchoes, setBanner as echoBanner } from './game/echo.js';
 import { updateBoss, drawBossExtras, setBanner as bossBanner } from './game/bosses.js';
 import { updateDirector, setBanner as dirBanner } from './game/director.js';
@@ -134,6 +134,7 @@ function render(dtR) {
   drawBackground(R, G, BG);
   if (G.screen === 'run' || G.screen === 'results') {
     drawWorld(R);
+    FX.drawDecals(R);
     drawEnemies(R);
     drawEchoes(R);
     drawPlayer(R);
@@ -144,6 +145,7 @@ function render(dtR) {
         R.q('glow', o.x, o.y, { sx: 0.35, sy: 0.35, tint: '#c8a0ff', alpha: 0.35, layer: L.GLOW });
       }
     }
+    drawBullets(R);
     drawBossExtras(R);
     drawBeams(R);
     FX.draw(R);
@@ -209,6 +211,6 @@ if (G.Q.has('dbg') || G.Q.has('test')) {
       }
     }
   };
-  (window).EB = { G, HUD, A, R, META, tick, afterTicks, render: () => render(0.016), step: (n) => { let i = 0; while (i++ < n && G.screen === 'run' && !G.modal && !G.paused) { tick(); afterTicks(); } } };
+  (window).EB = { G, HUD, A, R, META, tick, afterTicks, render: () => render(0.016), spawn: (type, n = 1, elite = null) => { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, d = 300 + Math.random() * 260; spawnEnemy(type, G.player.x + Math.cos(a) * d, G.player.y + Math.sin(a) * d, elite); } }, step: (n) => { let i = 0; while (i++ < n && G.screen === 'run' && !G.modal && !G.paused) { tick(); afterTicks(); } } };
 }
 requestAnimationFrame(frame);

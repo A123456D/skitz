@@ -37,7 +37,8 @@ function spawnAtPlayer(type, elite) {
   let x = G.player.x + Math.cos(a) * dist, y = G.player.y + Math.sin(a) * dist;
   const h = G.env.half - 40;
   x = Math.max(-h, Math.min(h, x)); y = Math.max(-h, Math.min(h, y));
-  return spawnEnemy(type, x, y, elite);
+  // telegraph first: a warning rune burns on the ground before the enemy steps through
+  G.spawnQueue.push({ type, x, y, elite, t: 0.65 });
 }
 
 const EVENTS = ['surge', 'storm', 'witness', 'fracture'];
@@ -76,6 +77,12 @@ export function updateDirector(dt) {
     D.budget -= cost;
     const elite = Math.random() < eliteChance ? randEl() : null;
     spawnAtPlayer(type, elite);
+  }
+  // spawn telegraphs ripening
+  for (let i = G.spawnQueue.length - 1; i >= 0; i--) {
+    const s = G.spawnQueue[i];
+    s.t -= dt;
+    if (s.t <= 0) { G.spawnQueue.splice(i, 1); spawnEnemy(s.type, s.x, s.y, s.elite); }
   }
   // events
   D.eventT -= dt;

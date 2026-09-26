@@ -77,6 +77,7 @@ export function updatePlayer(dt) {
   P.dashCd = Math.max(0, P.dashCd - dt);
   P.iT = Math.max(0, P.iT - dt);
   P.hurtFlash = Math.max(0, P.hurtFlash - dt);
+  P.fireT = Math.max(0, (P.fireT || 0) - dt);
   // fire
   if (I.firing()) {
     const s = WEAPONS[P.weapon];
@@ -89,6 +90,7 @@ export function updatePlayer(dt) {
         P.cd = s.cd;
         P.shotCount++;
         P.firedThisTick++;
+        P.fireT = 0.09;
         fireOnce(playerShooter());
       }
     }
@@ -202,11 +204,16 @@ export function drawPlayer(R) {
   R.q('ring', P.x, P.y + 6, { sx: 30 * 2 / (64 * 3), sy: 30 * 2 / (64 * 3), tint: '#54e6ff', alpha: 0.14, layer: L.DECAL });
   // dash trail ghosts
   if (P.dashT > 0) R.q('ghost', P.x - Math.cos(P.dashA) * 18, P.y - Math.sin(P.dashA) * 18, { tint: '#7de6ff', alpha: 0.3, ay: 0.92, layer: L.ENT });
-  const spr = P.char === 'runner' ? 'runner' : 'warden';
-  const bob = (P.vx || P.vy) && P.dashT <= 0 ? Math.sin(G.time * 14) * 1.5 : 0;
+  const moving = (Math.abs(P.vx) + Math.abs(P.vy)) > 20 && P.dashT <= 0;
+  const isRunner = P.char === 'runner';
+  const spr = isRunner ? 'runner' : 'warden' + (moving ? 1 + (Math.floor(G.time * 10) % 2) : 0);
+  const bob = moving ? Math.abs(Math.sin(G.time * 10)) * 2 : Math.sin(G.time * 3) * 0.8;
   const flip = Math.cos(P.aim) < 0 ? -1 : 1;
-  R.q(spr, P.x, P.y + bob, { sx: flip, ay: 0.92, alpha, layer: L.ENT, tint: P.hurtFlash > 0 ? '#ff8a8a' : '#ffffff' });
-  R.q('glow', P.x, P.y - 12, { sx: 0.9, sy: 0.9, tint: '#54e6ff', alpha: 0.34, layer: L.GLOW });
+  // recoil kick: nudge back along aim just after firing
+  P.fireT = Math.max(0, (P.fireT || 0));
+  const kick = (P.fireT || 0) * 90;
+  R.q(spr, P.x - Math.cos(P.aim) * kick, P.y + bob - Math.sin(P.aim) * kick * 0.5, { sx: flip, ay: 0.92, alpha, layer: L.ENT, tint: P.hurtFlash > 0 ? '#ff8a8a' : '#ffffff', sy: P.dashT > 0 ? 0.92 : 1 });
+  R.q('glow', P.x, P.y - 12, { sx: 0.75, sy: 0.75, tint: '#54e6ff', alpha: 0.26, layer: L.GLOW });
   // aim line
   if (META.d.set.aimline && !invisible) {
     for (let i = 1; i <= 3; i++) {

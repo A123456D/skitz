@@ -108,6 +108,14 @@ export function updateEchoes(dt) {
     const zs = zoneSlowAt(e.x, e.y);
     e.suppressed = sup;
     if (!sup) e.t += dt * 60 * e.mods.speedMul * zs;
+    // afterimage buffer
+    e.trailT2 = (e.trailT2 || 0) - dt;
+    if (e.trailT2 <= 0) {
+      e.trailT2 = 0.05;
+      e.hist = e.hist || [];
+      e.hist.push({ x: e.x, y: e.y });
+      if (e.hist.length > 5) e.hist.shift();
+    }
     const fr = e.frames;
     const idx = e.mods.reversed ? fr.length - 1 - e.t : e.t;
     const i0 = Math.max(0, Math.min(fr.length - 1, Math.floor(idx)));
@@ -196,15 +204,34 @@ function explodeEcho(e) {
 export function drawEchoes(R) {
   for (const e of G.echoes) {
     if (e.dead && (e.fade ?? 0) <= 0) continue;
-    const alpha = e.hostile ? 0.7 : 0.55;
+    const baseA = e.hostile ? 0.72 : 0.6;
     const tint = e.hostile ? '#ff7070' : '#7de6ff';
+    const glowC = e.hostile ? '#ff5a5a' : '#54e6ff';
     e.glitch += 0.016;
-    const gx = Math.sin(e.glitch * 40) > 0.92 ? rand(-3, 3) : 0;
-    // motion trail
-    if (e.moving && Math.random() < 0.4) FX.trailDot(e.x, e.y + 4, e.hostile ? '#ff5a5a' : '#54e6ff', 2.4, 0.25);
-    R.q('shadow', e.x, e.y + 10, { sx: 0.7, sy: 0.7, alpha: 0.3 * alpha, layer: 6 });
-    R.q('ghost', e.x + gx, e.y, { tint, alpha: alpha * (e.suppressed ? 0.35 : 1) * (e.dead ? Math.max(0, e.fade / 0.3) : 1), ay: 0.92, layer: 7 });
-    R.q('glow', e.x, e.y - 10, { sx: 1.1, sy: 1.1, tint: e.hostile ? '#ff5a5a' : '#54e6ff', alpha: 0.16 * alpha, layer: 9 });
+    // materialize: stretch up from the ground on spawn; implode on death
+    let sy = 1, sx = 1;
+    if (e.age < 0.28) { const k = e.age / 0.28; sy = 0.15 + 0.85 * (1 - (1 - k) * (1 - k)); sx = 1.25 - 0.25 * k; }
+    if (e.dead) { const k = Math.max(0, (e.fade ?? 0) / 0.3); sx = k; sy = k; }
+    // temporal ground sigil
+    R.q('ring', e.x, e.y + 8, { sx: 26 * 2 / (64 * 3), sy: 26 * 2 / (64 * 3), tint: glowC, alpha: 0.18 + Math.sin(G.time * 6 + e.glitch * 7) * 0.06, layer: 6 });
+    // afterimages
+    if (e.hist && e.moving && !e.dead) {
+      for (let i = 0; i < e.hist.length; i++) {
+        const h = e.hist[i];
+        R.q('ghost', h.x, h.y, { tint: glowC, alpha: 0.07 * (i + 1), ay: 0.92, sy, layer: 6 });
+      }
+    }
+    // frame displacement glitch
+    const gx = Math.sin(e.glitch * 40) > 0.9 ? rand(-3, 3) : 0;
+    const gy = Math.sin(e.glitch * 33) > 0.94 ? rand(-2, 2) : 0;
+    const A0 = baseA * (e.suppressed ? 0.35 : 1) * (e.dead ? Math.max(0, (e.fade ?? 0) / 0.3) : 1);
+    R.q('ghost', e.x + gx, e.y + gy, { tint, alpha: A0, ay: 0.92, sx: sx * (Math.sin(e.glitch * 40) > 0.9 ? 1.08 : 1), sy, layer: 7 });
+    // hologram scanline sweeping the silhouette
+    if (!e.dead) {
+      const scan = ((G.time * 46 + e.glitch * 60) % 30) - 8;
+      R.q('beam', e.x + gx, e.y - 24 + scan, { sx: 26 / (32 * 3), sy: 1.4 / (8 * 3), tint: '#d8f6ff', alpha: 0.34 * A0 * (e.suppressed ? 0.4 : 1), layer: 9 });
+    }
+    R.q('glow', e.x, e.y - 10, { sx: 1.05, sy: 1.05, tint: glowC, alpha: 0.2 * A0, layer: 9 });
     if (e.suppressed) R.text('X', e.x, e.y - 44, { s: 2, col: '#9aa3b5', alpha: 0.8, align: 'center', layer: 10 });
   }
 }

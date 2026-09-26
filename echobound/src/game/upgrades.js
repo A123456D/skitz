@@ -10,7 +10,7 @@ export const TRAIT_COL = {
   Explosion: '#ffb454', Movement: '#7dff9b', Echo: '#54e6ff', Critical: '#ffd75e', Summon: '#c8a0ff',
 };
 
-const W = (id, name, path, rank, desc, traits) => ({ id, name, cat: 'WEAPON', path, rank, desc, traits, wcat: true });
+const W = (id, name, path, rank, desc, traits) => ({ id, name, cat: 'WEAPON', path, rank, desc, traits, wcat: true, rar: rank === 2 ? 'rare' : 'common' });
 const UPG = [];
 // --- weapon paths (per current weapon) ---
 UPG.push(
@@ -37,9 +37,9 @@ UPG.push(
 UPG.push(
   { id: 'orbit', name: 'ORBIT SHARDS', cat: 'CORE', max: 1, desc: 'Three shards orbit you, shredding what touches them.', traits: ['Summon'] },
   { id: 'overclock', name: 'OVERCLOCK', cat: 'CORE', max: 1, desc: '+30% fire rate. Every 8th shot is a free critical.', traits: ['Critical', 'Projectile'] },
-  { id: 'secondwind', name: 'SECOND WIND', cat: 'CORE', max: 1, desc: 'Once this run: refuse to die. Return at half health.', traits: [] },
+  { id: 'secondwind', name: 'SECOND WIND', cat: 'CORE', max: 1, desc: 'Once this run: refuse to die. Return at half health.', traits: [], rar: 'rare' },
   { id: 'longstride', name: 'LONG STRIDE', cat: 'CORE', max: 1, desc: '+18% speed. Your dash tears through enemies.', traits: ['Movement'] },
-  { id: 'overflow', name: 'HEARTFRAME OVERFLOW', cat: 'CORE', max: 1, desc: '+1 Echo slot. Echoes hit 10% harder.', traits: ['Echo'] },
+  { id: 'overflow', name: 'HEARTFRAME OVERFLOW', cat: 'CORE', max: 1, desc: '+1 Echo slot. Echoes hit 10% harder.', traits: ['Echo'], rar: 'rare' },
   { id: 'magnet', name: 'DEEP MAGNET', cat: 'CORE', max: 1, desc: '+60% pickup range. Fragments come to you.', traits: [] },
 );
 // --- MUTATION ---
@@ -51,22 +51,22 @@ UPG.push(
   { id: 'twin', name: 'TWIN ROUND', cat: 'MUTATION', max: 1, desc: '+1 projectile per shot, -15% damage.', traits: ['Projectile'] },
   { id: 'killbreaker', name: 'KILLBREAKER', cat: 'MUTATION', max: 1, desc: 'Enemies you shoot dead explode.', traits: ['Explosion'] },
   { id: 'dashburn', name: 'DASHBURN', cat: 'MUTATION', max: 1, desc: 'Your dash leaves a line of fire.', traits: ['Fire', 'Movement'] },
-  { id: 'twinecho', name: 'TWIN ECHO', cat: 'MUTATION', max: 1, desc: 'Echoes are recorded every 7s instead of 10s.', traits: ['Echo'] },
-  { id: 'rewind', name: 'REWIND', cat: 'MUTATION', max: 1, desc: 'Echoes repeat your steps backwards, attacks in reverse.', traits: ['Echo'] },
-  { id: 'brokenRhythm', name: 'BROKEN RHYTHM', cat: 'MUTATION', max: 1, desc: 'Every 3rd Echo attack explodes.', traits: ['Echo', 'Explosion'] },
-  { id: 'mirrorShot', name: 'MIRROR SHOT', cat: 'MUTATION', max: 1, desc: 'Echo projectiles return home, then burst outward.', traits: ['Echo'] },
-  { id: 'predMemory', name: 'PREDATOR MEMORY', cat: 'MUTATION', max: 2, desc: 'Echoes hit 18% harder. They remember your targets.', traits: ['Echo', 'Critical'] },
-  { id: 'secondDeath', name: 'SECOND DEATH', cat: 'MUTATION', max: 1, desc: 'When an Echo fades, it detonates.', traits: ['Echo', 'Explosion'] },
-  { id: 'paradox', name: 'PARADOX', cat: 'MUTATION', max: 1, desc: 'Two overlapping Echoes merge into something stronger.', traits: ['Echo'] },
+  { id: 'twinecho', name: 'TWIN ECHO', cat: 'MUTATION', max: 1, desc: 'Echoes are recorded every 7s instead of 10s.', traits: ['Echo'], rar: 'rare' },
+  { id: 'rewind', name: 'REWIND', cat: 'MUTATION', max: 1, desc: 'Echoes repeat your steps backwards, attacks in reverse.', traits: ['Echo'], rar: 'rare' },
+  { id: 'brokenRhythm', name: 'BROKEN RHYTHM', cat: 'MUTATION', max: 1, desc: 'Every 3rd Echo attack explodes.', traits: ['Echo', 'Explosion'], rar: 'rare' },
+  { id: 'mirrorShot', name: 'MIRROR SHOT', cat: 'MUTATION', max: 1, desc: 'Echo projectiles return home, then burst outward.', traits: ['Echo'], rar: 'rare' },
+  { id: 'predMemory', name: 'PREDATOR MEMORY', cat: 'MUTATION', max: 2, desc: 'Echoes hit 18% harder. They remember your targets.', traits: ['Echo', 'Critical'], rar: 'rare' },
+  { id: 'secondDeath', name: 'SECOND DEATH', cat: 'MUTATION', max: 1, desc: 'When an Echo fades, it detonates.', traits: ['Echo', 'Explosion'], rar: 'rare' },
+  { id: 'paradox', name: 'PARADOX', cat: 'MUTATION', max: 1, desc: 'Two overlapping Echoes merge into something stronger.', traits: ['Echo'], rar: 'rare' },
 );
 // --- RELIC ---
 UPG.push(
-  { id: 'hourglass', name: 'THE HOURGLASS', cat: 'RELIC', max: 1, desc: 'Every 30s, time grinds slow for everything but you.', traits: [], relic: true },
-  { id: 'redbutton', name: 'THE RED BUTTON', cat: 'RELIC', max: 1, desc: 'Lose half your max health. Your Echoes become permanent.', traits: ['Echo'], relic: true },
-  { id: 'unfinishedmap', name: 'THE UNFINISHED MAP', cat: 'RELIC', max: 1, desc: 'The arena expands as the run continues.', traits: ['Movement'], relic: true },
-  { id: 'coin', name: "DEAD MAN'S COIN", cat: 'RELIC', max: 1, desc: 'Below 25% health: +50% damage dealt, -40% taken.', traits: ['Critical'], relic: true },
-  { id: 'theMirror', name: 'THE MIRROR', cat: 'RELIC', max: 1, desc: 'You fade from sight. Enemies aim worse. Echoes +25% damage.', traits: ['Echo'], relic: true },
-  { id: 'chrono', name: 'CHRONO ANCHOR', cat: 'RELIC', max: 1, desc: 'Echoes recorded every 8s, lasting 12s in slow replay.', traits: ['Echo'], relic: true },
+  { id: 'hourglass', name: 'THE HOURGLASS', cat: 'RELIC', max: 1, desc: 'Every 30s, time grinds slow for everything but you.', traits: [], relic: true, rar: 'epic' },
+  { id: 'redbutton', name: 'THE RED BUTTON', cat: 'RELIC', max: 1, desc: 'Lose half your max health. Your Echoes become permanent.', traits: ['Echo'], relic: true, rar: 'epic' },
+  { id: 'unfinishedmap', name: 'THE UNFINISHED MAP', cat: 'RELIC', max: 1, desc: 'The arena expands as the run continues.', traits: ['Movement'], relic: true, rar: 'epic' },
+  { id: 'coin', name: "DEAD MAN'S COIN", cat: 'RELIC', max: 1, desc: 'Below 25% health: +50% damage dealt, -40% taken.', traits: ['Critical'], relic: true, rar: 'epic' },
+  { id: 'theMirror', name: 'THE MIRROR', cat: 'RELIC', max: 1, desc: 'You fade from sight. Enemies aim worse. Echoes +25% damage.', traits: ['Echo'], relic: true, rar: 'epic' },
+  { id: 'chrono', name: 'CHRONO ANCHOR', cat: 'RELIC', max: 1, desc: 'Echoes recorded every 8s, lasting 12s in slow replay.', traits: ['Echo'], relic: true, rar: 'epic' },
 );
 
 export function allUpgrades() { return UPG; }

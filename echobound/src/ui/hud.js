@@ -198,15 +198,21 @@ export const HUD = {
     const d = document.createElement('div'); d.className = 'modal';
     d.innerHTML = `<div class="lu-title">${title}</div><div class="lu-sub">${sub}</div>`;
     const cards = document.createElement('div'); cards.className = 'cards';
+    const RAR_COL = { common: '#5a6a86', rare: '#ff5ad2', epic: '#ffd75e' };
     picks.forEach((p, i) => {
       const col = CAT_COL[p.cat] || '#54e6ff';
-      const c = document.createElement('div'); c.className = 'card'; c.style.setProperty('--cat', col);
+      const rar = p.rar || 'common';
+      const c = document.createElement('div'); c.className = 'card';
+      c.style.setProperty('--cat', col);
+      c.style.setProperty('--rarb', RAR_COL[rar]);
+      c.style.animationDelay = (i * 0.07) + 's';
       const stk = (G.owned[p.id] || 0);
       c.innerHTML = `
         <div class="cat">${p.cat}${p.relic ? ' · RELIC' : ''}</div>
         <div class="nm">${p.name}</div>
         <div class="ds">${p.desc}</div>
         <div class="tr">${(p.traits || []).map((t) => `<span class="trait" style="color:${TRAIT_COL[t] || '#8b93a7'};border-color:${TRAIT_COL[t] || '#8b93a7'}55">${t.toUpperCase()}</span>`).join('')}</div>
+        <div class="rarity rar-${rar}">${rar.toUpperCase()}</div>
         ${stk ? `<div class="stk">LV ${stk}</div>` : ''}
         <div class="key"><span class="kbd">${i + 1}</span></div>`;
       c.onclick = () => done(i);
