@@ -7,7 +7,9 @@ export function registerOffline(): void {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
     if (typeof window === 'undefined' || !window.isSecureContext) return;
     if (window.location.port === '5185') return;
-    void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    // relative: the build deploys under the hub's /games/orbital/ subpath, and
+    // an absolute path would hijack the whole domain's root SW scope
+    void navigator.serviceWorker.register('sw.js').catch(() => undefined);
   } catch {
     // SW unavailable or blocked — online play is unaffected
   }
