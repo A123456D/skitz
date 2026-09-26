@@ -7,6 +7,7 @@
 
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { World } from '../../sim/types';
+import { HOLE_CAPTURE_R } from '../../sim/world';
 import type { PinGhost } from '../api';
 import { beaconPulse, clamp, expDamp, mixRGB } from '../core';
 import { AMBER, DANGER, GREEN, GREEN_WARM, TexFactory } from '../textures';
@@ -355,7 +356,7 @@ export class ObjectsLayer {
     }
 
     // capture-radius hint scales with the level's actual capture size
-    const cap = w.def.hole.captureR ?? 16;
+    const cap = w.def.hole.captureR ?? HOLE_CAPTURE_R;
     this.holeCapR = cap;
     this.holeCapture.width = this.holeCapture.height = cap * 3.4;
     this.holeCup.width = this.holeCup.height = cap * 1.7;

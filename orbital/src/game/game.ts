@@ -90,6 +90,10 @@ class Game {
   private secretsFound = new Set<string>();
   private unlockedAudio = false;
   private isTouch = matchMedia('(pointer: coarse)').matches;
+  /** Real-time remaining of the sink slow-mo beat. */
+  private sinkSlowT = 0;
+  /** Consecutive non-sunk strokes on the current level (adaptive hints). */
+  private dryStrokes = 0;
 
   constructor(private host: HTMLElement, private uiRoot: HTMLElement) {
     const q = qa();
@@ -219,6 +223,8 @@ class Game {
     this.phase = 'aim';
     this.hazardHappened = false;
     this.secretsFound.clear();
+    this.dryStrokes = 0;
+    this.sinkSlowT = 0;
     this.levelTime = 0;
     this.renderer.setMiloMood(null);
     this.renderer.setPreview(null, null);
@@ -349,7 +355,10 @@ class Game {
       this.input.tick(dt);
       // gravity always simulates (moving bodies, pulses, debris) — the world
       // is alive even while aiming; ball physics only matter in flight
-      this.acc = Math.min(this.acc + dt, 0.25);
+      // sink slow-mo: the last approach to the cup gets a beat to land
+      const scale = this.sinkSlowT > 0 ? 0.3 : 1;
+      if (this.sinkSlowT > 0) this.sinkSlowT -= dt;
+      this.acc = Math.min(this.acc + dt * scale, 0.25);
       let events: SimEvent[] = [];
       while (this.acc >= STEP_DT) {
         this.acc -= STEP_DT;
@@ -419,6 +428,7 @@ class Game {
         case 'sink':
           this.audio.sfx('sink');
           this.buzz([20, 40, 60], 0);
+          this.sinkSlowT = 0.65;
           break;
         case 'lipout':
           this.audio.sfx('lipout');
@@ -464,6 +474,11 @@ class Game {
     }
     this.phase = 'strokeEndWait';
     this.waitT = 0.45;
+    this.dryStrokes++;
+    // adaptive help: struggling on a hole? the caddie whispers
+    if ((this.dryStrokes === 3 || this.dryStrokes === 6) && w.def.hint) {
+      this.ui.toast(`HINT — ${w.def.hint}`, 'neutral');
+    }
     const msg = reason === 'voided' ? 'LOST TO THE VOID' : reason === 'hazard' ? 'HAZARD' : 'SETTLED';
     this.ui.toast(msg, 'bad');
   }

@@ -27,7 +27,7 @@ export const BOUNDS_GRACE = 1.5;
 export const PIN_MU = 1.2e6;
 export const PIN_INFLUENCE_R = 260;
 export const MAX_LAUNCH_SPEED = 900;
-export const HOLE_CAPTURE_R = 20;
+export const HOLE_CAPTURE_R = 30;
 
 const f1: FieldSample = makeFieldSample();
 const f2: FieldSample = makeFieldSample();
