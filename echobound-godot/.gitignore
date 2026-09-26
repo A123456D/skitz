@@ -3,3 +3,4 @@ tools/*.exe
 .godot/
 *.tmp
 art/shot.png
+*.zip
