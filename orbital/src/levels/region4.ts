@@ -126,7 +126,7 @@ export const R4_LEVELS: LevelDef[] = [
       'The finale\u2019s wow-moment: the Course\u2019s calibration cradle lies DARK ahead of you — launch into dead ' +
       'space and the machine WAKES as you arrive, seizing your ball mid-flight and slinging it around its limb to the ' +
       'last green. Everything Milo has suspected is on the other side of this hole.',
-    par: 5,
+    par: 4,
     pinBudget: 2,
     tee: { x: 300, y: 720 },
     hole: { x: 1850, y: 1060 },

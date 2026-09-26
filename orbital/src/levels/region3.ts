@@ -11,7 +11,7 @@ export const R3_LEVELS: LevelDef[] = [
     concept:
       'One enormous mass fills half the sky: too big to fight, so you give in. ' +
       'The par route is a long, patient orbit around the Titan\u2019s limb — the green sits on the swing-out.',
-    par: 4,
+    par: 3,
     pinBudget: 2,
     tee: { x: 300, y: 780 },
     hole: { x: 1620, y: 1180 },
@@ -154,7 +154,7 @@ export const R3_LEVELS: LevelDef[] = [
     concept:
       'THE REGION\u2019S WOW-MOMENT: two giants trade custody of your ball. One lap of Alpha, through the ' +
       'crossing, one lap of Beta, released at the seam — the knot in the old trail murals, flown for real.',
-    par: 4,
+    par: 3,
     pinBudget: 2,
     tee: { x: 300, y: 780 },
     hole: { x: 1980, y: 560 },

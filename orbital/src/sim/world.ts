@@ -515,24 +515,24 @@ export function stepTick(w: World, ghost = false): void {
         }
       }
     }
-    // debris can trip switches (THE CASCADE) — physics is honest: always on
-    if (!ghost) {
-      for (const s of w.switches) {
-        if (s.def.mode === 'once' && s.hit) continue;
-        if (Math.hypot(db.x - s.def.x, db.y - s.def.y) < s.def.r + db.r) {
-          touchSwitch(w, s.def.id, ghost);
-        }
+    // debris can trip switches (THE CASCADE) — physics is honest: always on,
+    // in ghost too (prediction shows the machinery's future honestly)
+    for (const s of w.switches) {
+      if (s.def.mode === 'once' && s.hit) continue;
+      if (Math.hypot(db.x - s.def.x, db.y - s.def.y) < s.def.r + db.r) {
+        touchSwitch(w, s.def.id, ghost);
       }
     }
   }
 
-  // switches (ball contact) — ghost runs physics only
-  if (!ghost && !ball.dead) {
+  // switches (ball contact) — fire in ghost as well; predict() restores all
+  // mutable state afterwards, so previews show switches flipping honestly
+  if (!ball.dead) {
     for (const s of w.switches) {
       if (s.def.mode === 'once' && s.hit) continue;
       if (Math.hypot(ball.x - s.def.x, ball.y - s.def.y) < s.def.r + BALL_R) {
         touchSwitch(w, s.def.id, ghost);
-        markTouched(w, s.def.id);
+        if (!ghost) markTouched(w, s.def.id);
       }
     }
   }
