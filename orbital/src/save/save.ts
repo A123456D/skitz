@@ -2,7 +2,7 @@
 // migrate via chain when the version bumps. Never save per-frame.
 
 const KEY = 'orbital.save';
-const VERSION = 1;
+const VERSION = 2;
 
 export interface Medal { par: boolean; obj: boolean; frag: boolean }
 
@@ -71,7 +71,19 @@ export function writeSave(data: SaveData): void {
   }
 }
 
-function migrate(_old: Partial<SaveData>): SaveData {
-  // v1 is the first version; unknown future versions fall back to defaults.
-  return { ...DEFAULTS, medals: {}, fragments: {}, settings: { ...DEFAULTS.settings } };
+function migrate(old: Partial<SaveData>): SaveData {
+  // v1→v2: aiming becomes drag-back (slingshot) for everyone — the stored
+  // point-forward default from v1's touch experiment is retired.
+  if (old.v === 1) {
+    return {
+      ...DEFAULTS,
+      ...old,
+      v: 2,
+      settings: { ...DEFAULTS.settings, ...(old.settings ?? {}), aimForward: false },
+      medals: old.medals ?? {},
+      fragments: old.fragments ?? {},
+      bestTimes: old.bestTimes ?? {},
+    };
+  }
+  return { ...DEFAULTS, medals: {}, fragments: {}, settings: { ...DEFAULTS.settings }, bestTimes: {} };
 }

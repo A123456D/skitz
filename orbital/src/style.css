@@ -34,6 +34,22 @@ canvas { display: block; }
   background: radial-gradient(ellipse at center, transparent 55%, rgba(2, 4, 10, 0.45) 100%);
 }
 
+/* Aim power bar — slim bottom meter while dragging (Perihelion-style) */
+#ob-powerbar {
+  position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: 180px; height: 5px; border-radius: 3px;
+  background: rgba(232, 236, 244, 0.12);
+  opacity: 0; transition: opacity 120ms ease-out;
+  pointer-events: none; z-index: 3; overflow: hidden;
+}
+#ob-powerbar.on { opacity: 1; }
+#ob-powerbar i {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, #7fd8e8, #ffb347, #ff5d47);
+  border-radius: 3px;
+}
+
 /* Portrait lock on touch devices — the course is composed for landscape */
 #ob-rotate { display: none; }
 @media (orientation: portrait) and (pointer: coarse) {

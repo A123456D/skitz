@@ -15,7 +15,7 @@ import type { StoryRunner } from '../story/api';
 import { mountUI } from '../ui';
 import type { UIHandle, LevelResult, UIHooks } from '../ui/api';
 import { LEVELS } from '../levels';
-import { loadSave, writeSave, hasSavedGame } from '../save/save';
+import { loadSave, writeSave } from '../save/save';
 import type { SaveData } from '../save/save';
 import { InputController } from './input';
 import { strokeName, evaluateObjectives, computeMedals, secretZones } from './scoring';
@@ -39,6 +39,9 @@ export function bootGame(root: HTMLElement): void {
   uiRoot.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
   const vignette = document.createElement('div');
   vignette.id = 'ob-vignette';
+  const powerbar = document.createElement('div');
+  powerbar.id = 'ob-powerbar';
+  powerbar.innerHTML = '<i></i>';
   const rotate = document.createElement('div');
   rotate.id = 'ob-rotate';
   rotate.innerHTML =
@@ -62,6 +65,7 @@ export function bootGame(root: HTMLElement): void {
   root.appendChild(host);
   root.appendChild(vignette);
   root.appendChild(uiRoot);
+  root.appendChild(powerbar);
   root.appendChild(rotate);
   root.appendChild(fullscreen);
 
@@ -92,6 +96,8 @@ class Game {
   private isTouch = matchMedia('(pointer: coarse)').matches;
   /** Real-time remaining of the sink slow-mo beat. */
   private sinkSlowT = 0;
+  private powerBar: HTMLElement | null = null;
+  private powerFill: HTMLElement | null = null;
   /** Consecutive non-sunk strokes on the current level (adaptive hints). */
   private dryStrokes = 0;
   private runSeed = 1;
@@ -153,13 +159,14 @@ class Game {
       onAimCancel: () => {
         this.renderer.setAim(false, 0, 0, 0);
         this.renderer.setPreview(null, null);
+        if (this.powerBar) this.powerBar.classList.remove('on');
       },
       onTap: (sx, sy) => this.tapPlacePin(sx, sy),
       onHover: (sx, sy) => this.hoverGhost(sx, sy),
       onKey: (code) => this.key(code),
     });
-    // mobile-first default: touch players point where they want to go
-    if (!hasSavedGame()) this.save.settings.aimForward = this.isTouch;
+    // aiming is drag-back (slingshot) everywhere since save v2 — the settings
+    // toggle "POINT FORWARD" remains for those who want the other feel
     this.input.aimForward = this.save.settings.aimForward;
 
     this.story.onLine((line) => this.ui.showSubtitle(line));
@@ -174,6 +181,8 @@ class Game {
       if (e.matches && this.world && !qa().get('nopause')) this.pause();
     });
 
+    this.powerBar = document.getElementById('ob-powerbar');
+    this.powerFill = this.powerBar ? this.powerBar.querySelector('i') : null;
     this.ui.showSubtitle = this.ui.showSubtitle.bind(this.ui);
     this.unlockAudio = this.unlockAudio.bind(this);
     window.addEventListener('pointerdown', this.unlockAudio, { once: false });
@@ -345,9 +354,14 @@ class Game {
   private updateAim(dx: number, dy: number, p: number): void {
     if (this.phase !== 'aim' || !this.world) return;
     this.renderer.setAim(true, dx, dy, p);
+    if (this.powerBar && this.powerFill) {
+      this.powerBar.classList.add('on');
+      this.powerFill.style.width = (Math.round(p * 100)) + '%';
+    }
     const speed = MAX_LAUNCH_SPEED * p;
     if (this.previewEnabled && speed > 30) {
-      const res = predict(this.world, dx * speed, dy * speed, 3.2);
+      // Perihelion-style: show the whole planned arc, not a teaser
+      const res = predict(this.world, dx * speed, dy * speed, 8, 5);
       this.renderer.setPreview(res.points, res.end);
     }
   }
@@ -357,6 +371,7 @@ class Game {
     const speed = MAX_LAUNCH_SPEED * p;
     if (speed < 30) return;
     launch(this.world, dx, dy, speed);
+    if (this.powerBar) this.powerBar.classList.remove('on');
     this.renderer.setAim(false, 0, 0, 0);
     this.renderer.setPreview(null, null);
     this.renderer.setPinGhost(null);
