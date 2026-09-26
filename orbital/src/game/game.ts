@@ -15,7 +15,7 @@ import type { StoryRunner } from '../story/api';
 import { mountUI } from '../ui';
 import type { UIHandle, LevelResult, UIHooks } from '../ui/api';
 import { LEVELS } from '../levels';
-import { loadSave, writeSave } from '../save/save';
+import { loadSave, writeSave, hasSavedGame } from '../save/save';
 import type { SaveData } from '../save/save';
 import { InputController } from './input';
 import { strokeName, evaluateObjectives, computeMedals, secretZones } from './scoring';
@@ -140,6 +140,8 @@ class Game {
       onHover: (sx, sy) => this.hoverGhost(sx, sy),
       onKey: (code) => this.key(code),
     });
+    // mobile-first default: touch players point where they want to go
+    if (!hasSavedGame()) this.save.settings.aimForward = this.isTouch;
     this.input.aimForward = this.save.settings.aimForward;
 
     this.story.onLine((line) => this.ui.showSubtitle(line));
@@ -184,6 +186,20 @@ class Game {
       } catch {
         // lock unavailable — rotate overlay remains the fallback
       }
+    }
+  }
+
+  /** Mobile juice: short vibration patterns on the moments that matter. */
+  private lastBuzzT = 0;
+  private buzz(pattern: number | number[], minGapMs = 90): void {
+    if (!this.isTouch || !('vibrate' in navigator)) return;
+    const now = performance.now();
+    if (now - this.lastBuzzT < minGapMs) return;
+    this.lastBuzzT = now;
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      // unsupported — silent
     }
   }
 
@@ -388,17 +404,21 @@ class Game {
       switch (e.type) {
         case 'launch':
           this.audio.sfx('launch');
+          this.buzz(10, 200);
           break;
         case 'bounce':
           this.audio.sfx('bounce', { gain: Math.min(1, 0.3 + e.speed / 600), pitch: 0.8 + Math.min(1, e.speed / 800) * 0.6 });
           this.renderer.screenShake(Math.min(1, e.speed / 700) * (this.save.settings.shake ? 1 : 0));
+          this.buzz(Math.min(18, 4 + Math.round(e.speed / 40)));
           break;
         case 'hazard':
           this.audio.sfx('hazard');
           this.hazardHappened = true;
+          this.buzz([10, 30, 10], 0);
           break;
         case 'sink':
           this.audio.sfx('sink');
+          this.buzz([20, 40, 60], 0);
           break;
         case 'lipout':
           this.audio.sfx('lipout');
@@ -406,6 +426,7 @@ class Game {
         case 'orbit':
           this.audio.sfx('orbit');
           this.ui.toast('ORBIT COMPLETE', 'good');
+          this.buzz([8, 20, 8], 0);
           break;
         case 'switch':
           if (e.ok) this.audio.sfx('switch');
@@ -419,6 +440,7 @@ class Game {
           break;
         case 'pinPlace':
           this.audio.sfx('pinPlace');
+          this.buzz(12, 150);
           break;
         case 'pinDeny':
           this.audio.sfx('pinDeny');

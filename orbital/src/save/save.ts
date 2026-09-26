@@ -53,6 +53,14 @@ export function loadSave(): SaveData {
   }
 }
 
+export function hasSavedGame(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function writeSave(data: SaveData): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(data));

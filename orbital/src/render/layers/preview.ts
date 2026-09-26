@@ -1,6 +1,6 @@
 // layers/preview.ts — the prediction & aim read-out. Designed to be
 // UNMISSABLE at gameplay zoom (polish pass): every dot is sized in SCREEN
-// space (>=4.5px regardless of camera zoom), rides on an additive glow halo
+// space (>=5.5px regardless of camera zoom), rides on an additive glow halo
 // for contrast over both dark skies and the region sun, and the end markers
 // (flag pop / red x / rest dot) are screen-scaled and high-contrast.
 // All sprite-pooled; the game may push new preview data every frame without
@@ -13,7 +13,8 @@ import { AMBER, DANGER, GREEN_WARM, TexFactory } from '../textures';
 
 const MAX_POINTS = 160;
 const MAX_DOTS = 56;
-const MIN_DOT_PX = 4.5; // screen-space floor — never faint at any zoom
+const MIN_DOT_PX = 5.5; // screen-space floor — never faint at any zoom
+                        // (bumped for phone landscape: 390px-tall screens)
 
 export class PreviewLayer {
   readonly container = new Container();
@@ -225,10 +226,11 @@ export class PreviewLayer {
       this.restCore.alpha = 1;
     }
 
-    // --- aim arrow anchored at the ball (components placed in world axes)
+    // --- aim arrow anchored at the ball (screen-space like the dots: at the
+    // phone bounds zoom (~0.25) the old world-space sizes were ~1px thin)
     this.aimC.visible = this.aimActive;
     if (!this.aimActive) return;
-    const len = 34 + this.aimPower * 150;
+    const len = (26 + this.aimPower * 110) * inv; // css px along the aim axis
     const ang = Math.atan2(this.aimDy, this.aimDx);
     const c = Math.cos(ang);
     const s = Math.sin(ang);
@@ -236,25 +238,26 @@ export class PreviewLayer {
     this.aimC.x = ballX;
     this.aimC.y = ballY;
     this.aimShaft.rotation = ang;
-    this.aimShaft.x = 18 * c;
-    this.aimShaft.y = 18 * s;
+    this.aimShaft.x = 18 * inv * c;
+    this.aimShaft.y = 18 * inv * s;
     this.aimShaft.width = len;
-    this.aimShaft.height = 6;
+    this.aimShaft.height = 6 * inv;
     this.aimShaft.tint = col;
     this.aimShaft.alpha = 0.85;
-    this.aimHead.x = (26 + len) * c;
-    this.aimHead.y = (26 + len) * s;
+    this.aimHead.x = (26 * inv + len) * c;
+    this.aimHead.y = (26 * inv + len) * s;
+    this.aimHead.width = this.aimHead.height = 30 * inv;
     this.aimHead.rotation = ang;
     this.aimHead.tint = col;
     this.aimHead.alpha = 0.95;
     for (let i = 0; i < 3; i++) {
       const tick = this.aimTicks[i];
-      const d = 18 + len * 0.25 * (i + 1);
+      const d = 18 * inv + len * 0.25 * (i + 1);
       tick.x = d * c;
       tick.y = d * s;
       tick.rotation = ang + Math.PI / 2; // perpendicular to the shaft
-      tick.width = 3.5;
-      tick.height = 14;
+      tick.width = 3.5 * inv;
+      tick.height = 14 * inv;
       tick.alpha = 0.7;
       tick.tint = col;
     }

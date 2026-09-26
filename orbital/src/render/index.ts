@@ -17,6 +17,8 @@ import { VfxLayer } from './layers/vfx';
 import { PreviewLayer } from './layers/preview';
 
 const MAX_DT = 0.05; // clamp long frames so eased motion never explodes
+const DPR_CAP_FULL = 2;   // full-tier DPR cap (contract)
+const DPR_CAP_LITE = 1.5; // lite tier renders under 1.5x density (phone perf)
 
 class OrbitalRendererImpl implements OrbitalRenderer {
   private app = new Application();
@@ -72,7 +74,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
       preference: 'webgpu',
       antialias: true,
       background: '#04060c',
-      resolution: Math.min(window.devicePixelRatio || 1, 2), // DPR cap: 2 (contract)
+      resolution: Math.min(window.devicePixelRatio || 1, this.dprCap()), // tier DPR cap
       autoDensity: true,
       resizeTo: host,
       powerPreference: 'high-performance',
@@ -126,7 +128,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.zones.update(w, dt);
     this.objects.update(w, dt);
     this.milo.markAim(this.aimActive);
-    this.milo.update(w, dt);
+    this.milo.update(w, dt, this.cam.scale);
     this.vfx.update(dt);
     this.preview.update(dt, w.ball.x, w.ball.y, this.cam.scale);
 
@@ -243,12 +245,26 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.bg.setQuality(tier);
     this.bodies.setQuality(tier); // drift budgets re-apply on next level build
     this.vfx.setQuality(tier);
+    // re-apply the tier's DPR cap immediately (resize() re-checks it too)
+    if (this.mounted) this.resize();
+  }
+
+  /** Resolution cap for the active quality tier. */
+  private dprCap(): number {
+    return this.quality === 'lite' ? DPR_CAP_LITE : DPR_CAP_FULL;
+  }
+
+  /** Clamp renderer resolution to the tier's DPR cap (phone perf). */
+  private applyResolution(): void {
+    const dpr = Math.min(window.devicePixelRatio || 1, this.dprCap());
+    if (this.app.renderer.resolution !== dpr) this.app.renderer.resolution = dpr;
   }
 
   resize(): void {
     if (!this.host || !this.mounted) return;
     const vw = Math.max(1, this.host.clientWidth);
     const vh = Math.max(1, this.host.clientHeight);
+    this.applyResolution(); // tier cap first; resize() below re-applies it
     this.app.renderer.resize(vw, vh);
     this.cam.setView(vw, vh);
     this.bg.resize(vw, vh);

@@ -60,8 +60,17 @@ export function createAudio(): OrbitalAudio {
 
     const sfxBus = ctx.createGain();
     const musicBus = ctx.createGain();
+    // Phone-speaker tuning: a gentle highpass (~90 Hz, Butterworth) on the
+    // music bus. Tiny drivers cannot reproduce sub bass — below ~90 Hz the
+    // beds' low pads and the intensity sub only turn to mud; on real speakers
+    // the shelf sits below the fundamentals and is inaudible.
+    const musicHp = ctx.createBiquadFilter();
+    musicHp.type = 'highpass';
+    musicHp.frequency.value = 90;
+    musicHp.Q.value = 0.7;
     sfxBus.connect(master);
-    musicBus.connect(master);
+    musicBus.connect(musicHp);
+    musicHp.connect(master);
     sfxBus.gain.value = busLevels.sfx * busLevels.sfx; // v² ≈ perceptual loudness
     musicBus.gain.value = busLevels.music * busLevels.music;
 
@@ -98,8 +107,23 @@ export function createAudio(): OrbitalAudio {
 
   /** Cheap in-call resume for methods invoked without a recent gesture. */
   function wake(): void {
-    if (g && g.ctx.state === 'suspended') void g.ctx.resume();
+    // Not just 'suspended': iOS reports 'interrupted' (phone call, route
+    // change) — anything short of running is worth a resume attempt.
+    if (g && g.ctx.state !== 'running') void g.ctx.resume().catch(() => undefined);
   }
+
+  // --- unlock reliability ----------------------------------------------------
+  // iOS suspends the context aggressively (backgrounding, route changes), and
+  // the integrator's first-gesture unlock only ever runs once. These listeners
+  // re-resume idempotently: resume() on a running context is a no-op, and with
+  // no graph built yet there is nothing to wake — creation stays owned by
+  // unlock(). Removed in destroy() so a rebuilt engine never double-binds.
+  const onVisible = (): void => {
+    if (!document.hidden) wake();
+  };
+  const onPointer = (): void => wake();
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('pointerdown', onPointer, { passive: true });
 
   const api: OrbitalAudioEx = {
     unlock,
@@ -172,6 +196,8 @@ export function createAudio(): OrbitalAudio {
     },
 
     destroy(): void {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pointerdown', onPointer);
       for (const v of [...voices]) killVoice(v);
       timers.clear();
       music?.dispose();

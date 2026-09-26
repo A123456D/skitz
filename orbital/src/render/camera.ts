@@ -3,16 +3,31 @@
 //
 // Behavior contract:
 //  - Auto-frame the level's elliptical bounds with margin on load (snap).
-//  - While the ball flies, the center eases toward the ball but the offset
-//    from the level center is capped inside the bounds ellipse (never unframes).
+//  - While the ball flies, the center eases toward the ball; on desktop the
+//    offset stays capped so the course never unframes, on small (phone)
+//    viewports the follow is tighter and the course may partially leave the
+//    frame (cinematic). Bounds framing returns between strokes.
 //  - Screen shake decays exponentially; offsets are bounded by magnitude.
 
-import { capToEllipse, decayShake, expDamp, fitScale, type PtOut } from './core';
+import { capToEllipse, clamp, decayShake, expDamp, fitScale, type PtOut } from './core';
 
 export interface Bounds { cx: number; cy: number; rx: number; ry: number }
 export interface BallLike { x: number; y: number }
 
-const DEFAULT_MARGIN = 1.18;
+// ------------------------------------------------------------------ framing
+// Mobile-first tuning: phone landscape (844x390, even 740x360 css px) is the
+// canonical viewport; desktop is the scaled-up guest. Everything below is
+// derived from the CURRENT view size every frame()/refit()/update() call —
+// never from construction time — so rotating or resizing re-frames live.
+const SMALL_VIEW_DIM = 500;     // css px: min(viewW, viewH) below this = "phone"
+const SMALL_RAMP = 70;          // blend width, so crossing the line never pops
+const MARGIN_LARGE = 1.18;      // bounds fit margin at desktop (1280x800 tuning)
+const MARGIN_SMALL = 1.04;      // course fills the screen on phones
+const FOLLOW_CAP_LARGE = 0.42;  // flight follow cap fraction (of half-view)
+const FOLLOW_CAP_SMALL = 0.62;  // phones stick closer to the ball mid-flight:
+                                // partial off-screen course is fine/cinematic
+const FOLLOW_DIST_LARGE = 0.28; // hard follow-distance cap fraction, desktop
+const FOLLOW_DIST_SMALL = 0.44; // phones keep following further out
 
 export class Camera {
   /** Uniform world→screen scale. */
@@ -22,8 +37,6 @@ export class Camera {
   cy = 0;
   viewW = 1280;
   viewH = 720;
-  /** Multiplied into devicePixelRatio by the app; here 1 = CSS pixel space. */
-  margin = DEFAULT_MARGIN;
 
   private baseCx = 0;
   private baseCy = 0;
@@ -43,11 +56,31 @@ export class Camera {
     this.viewH = h;
   }
 
+  /** 0 = desktop framing, 1 = phone framing, smoothly blended in between. */
+  private get phoneT(): number {
+    return clamp((SMALL_VIEW_DIM - Math.min(this.viewW, this.viewH)) / SMALL_RAMP, 0, 1);
+  }
+
+  /** Current bounds fit margin (unitless; derives from the live viewport). */
+  get fitMargin(): number {
+    return MARGIN_LARGE + (MARGIN_SMALL - MARGIN_LARGE) * this.phoneT;
+  }
+
+  /** Flight follow cap fraction — larger on phones (tighter follow). */
+  get followCapFraction(): number {
+    return FOLLOW_CAP_LARGE + (FOLLOW_CAP_SMALL - FOLLOW_CAP_LARGE) * this.phoneT;
+  }
+
+  /** Hard follow-distance fraction — larger on phones (follows further out). */
+  get followDistFraction(): number {
+    return FOLLOW_DIST_LARGE + (FOLLOW_DIST_SMALL - FOLLOW_DIST_LARGE) * this.phoneT;
+  }
+
   /** Frame a level. `snap` skips easing (level load / resize from nothing). */
   frame(b: Bounds, snap = false): void {
     this.baseCx = b.cx;
     this.baseCy = b.cy;
-    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
+    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.fitMargin);
     if (snap || this.scale === 1) {
       this.scale = this.baseScale;
       this.cx = b.cx;
@@ -59,7 +92,7 @@ export class Camera {
 
   /** Re-fit without easing after a viewport resize (keeps the center). */
   refit(b: Bounds): void {
-    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.margin);
+    this.baseScale = fitScale(this.viewW, this.viewH, b.rx, b.ry, this.fitMargin);
     this.scale = this.baseScale;
   }
 
@@ -79,14 +112,17 @@ export class Camera {
         this.followCap.x = 0;
         this.followCap.y = 0;
       }
-      // Cap grows with a shrink factor (0.42) — pan less than the full bounds.
+      // Cap grows with a viewport-derived fraction (0.42 desktop / 0.62 phone)
+      // — on phones the camera pans tighter on the ball and the course edge
+      // may leave the frame; bounds framing returns between strokes.
+      const capF = this.followCapFraction;
       capToEllipse(ball.x - this.baseCx, ball.y - this.baseCy,
-        0.42 * (this.viewW / this.scale) * 0.5, 0.42 * (this.viewH / this.scale) * 0.5, this.followCap);
+        capF * (this.viewW / this.scale) * 0.5, capF * (this.viewH / this.scale) * 0.5, this.followCap);
       // Cap against the level ellipse too — whichever is tighter wins.
       const lx = ball.x - this.baseCx;
       const ly = ball.y - this.baseCy;
       const ld = Math.hypot(lx, ly);
-      const maxD = Math.min(this.viewW, this.viewH) / this.scale * 0.28;
+      const maxD = Math.min(this.viewW, this.viewH) / this.scale * this.followDistFraction;
       if (ld > maxD && ld > 0) {
         this.followCap.x = (lx / ld) * maxD;
         this.followCap.y = (ly / ld) * maxD;

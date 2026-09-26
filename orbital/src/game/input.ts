@@ -34,6 +34,8 @@ export class InputController {
   enabled = false;
   /** true: drag toward the target fires toward it; false: slingshot pull. */
   aimForward = false;
+  /** Longer drag runway on touch for finer power control. */
+  private maxDragFrac = matchMedia('(pointer: coarse)').matches ? 0.45 : 0.35;
 
   constructor(el: HTMLElement, cb: InputCallbacks) {
     this.el = el;
@@ -83,7 +85,7 @@ export class InputController {
     const dy = sign * (this.curY - this.startY);
     const len = Math.hypot(dx, dy);
     if (len < DRAG_THRESHOLD) return;
-    const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * 0.35;
+    const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * this.maxDragFrac;
     const power01 = Math.min(1, len / maxDrag);
     this.cb.onAim(dx / len, dy / len, this.powerCurve(power01));
   }
@@ -138,7 +140,7 @@ export class InputController {
       if (len < DRAG_THRESHOLD) {
         this.cb.onAimCancel();
       } else {
-        const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * 0.35;
+        const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * this.maxDragFrac;
         this.cb.onAimEnd(dx / len, dy / len, this.powerCurve(Math.min(1, len / maxDrag)));
       }
       return;

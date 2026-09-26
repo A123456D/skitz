@@ -15,6 +15,8 @@ import { miloTextures, TexFactory } from '../textures';
 import type { MiloMood } from '../api';
 
 const VIS_R = 11.5; // visual radius (sim collision radius is 10 — slight oversize reads friendly)
+const MILO_MIN_R_PX = 4.6; // css-px floor on the on-screen radius (phone legibility:
+                           // at the ~0.25 phone zoom Milo was a 5px speck)
 const TRAIL_N = 26;
 const TRAIL_DT = 0.024;
 
@@ -188,9 +190,16 @@ export class MiloLayer {
     }
   }
 
-  update(w: World, dt: number): void {
+  update(w: World, dt: number, camScale = 1): void {
     this.t += dt;
     const b = w.ball;
+
+    // --- phone legibility: inflate root uniformly when the bounds zoom would
+    // shrink Milo below the screen-radius floor (the small visual/collision
+    // divergence this causes — <= ~2 css px at phone scale — reads fine)
+    const rPx = VIS_R * camScale;
+    const zoomComp = rPx > 0 && rPx < MILO_MIN_R_PX ? MILO_MIN_R_PX / rPx : 1;
+    this.root.scale.set(zoomComp);
 
     // a new stroke revives Milo (startStroke cleared dead without a rebuild)
     if (this.hidden && !b.dead) this.hidden = false;
@@ -358,7 +367,7 @@ export class MiloLayer {
         sp.y = (y0 + y1) * 0.5;
         sp.rotation = Math.atan2(dy, dx);
         sp.width = Math.max(6, d);
-        sp.height = 3.4;
+        sp.height = 3.4 * zoomComp; // ribbon keeps up with the ball's zoom lift
         const age = 1 - i / TRAIL_N;
         sp.tint = speedRamp(this.tSpd[i] / MAX_LAUNCH_SPEED);
         sp.alpha = 0.5 * age * age;

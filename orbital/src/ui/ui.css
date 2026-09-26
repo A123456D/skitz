@@ -820,6 +820,86 @@
   100% { opacity: 0; transform: translateY(-6px); }
 }
 
+/* --------------------------------------------------------------- TUTORIAL
+   First-run gesture cards. The dim layer itself never captures the pointer —
+   drags pass through to the canvas so aiming keeps working during the tips;
+   only the card (tap-to-advance) and SKIP chip opt back in. */
+.ob-tut {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 8, 16, 0.55);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s var(--ob-ease), visibility 0.3s;
+}
+.ob-tut.is-on { opacity: 1; visibility: visible; }
+.ob-tut-card {
+  width: min(420px, 88vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 28px 16px;
+  background: var(--panel);
+  border: 1px solid var(--ob-line);
+  border-radius: 16px;
+  text-align: center;
+  cursor: pointer;
+}
+.ob-tut-step {
+  font-family: var(--ob-mono);
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-indent: 0.1em;
+  color: var(--gravity);
+}
+.ob-tut-text {
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.ob-tut-dots { display: flex; gap: 7px; }
+.ob-tut-dots i {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(139, 147, 167, 0.28);
+  transition: background 0.2s;
+}
+.ob-tut-dots i.is-on { background: var(--accent); }
+.ob-tut-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin-top: 2px;
+}
+.ob-tut-hint {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--muted);
+}
+.ob-tut-skip { min-height: 40px; padding: 0 18px; }
+
+/* ------------------------------------------------------------ INSTALL CHIP
+   Android PWA prompt — appears on the TITLE screen only, only while a
+   beforeinstallprompt event is in hand and the app is not standalone. */
+.ob-install {
+  min-height: 40px;
+  padding: 0 18px;
+  color: var(--gravity);
+  border-color: rgba(111, 214, 232, 0.4);
+}
+.ob-install::before { background: var(--gravity); }
+.ob-install:hover:not([disabled]) { border-color: var(--gravity); color: #bdeef8; }
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 640px) {
@@ -828,6 +908,26 @@
   .ob-objectives { max-width: 210px; }
   .ob-detail { gap: 10px; }
   .ob-title-actions { flex-direction: column; align-items: center; }
+}
+
+/* Short screens — phone landscape (≈844×390) is the canonical player. Rows get
+   crowded, so HUD chips shrink ~10% and the subtitle lane narrows. */
+@media (max-height: 420px) {
+  .ob-strokes { padding: 7px 12px; gap: 2px; }
+  .ob-strokes-num { font-size: 29px; }
+  .ob-termchip { letter-spacing: 0.26em; }
+  .ob-pins { padding: 6px 11px; gap: 8px; }
+  .ob-frags { padding: 7px 10px; }
+  .ob-objectives { max-width: 230px; padding: 8px 12px; gap: 4px; }
+  .ob-pausebtn { width: 44px; height: 44px; }
+  .ob-subtitle {
+    max-width: min(520px, 78vw);
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    padding: 8px 18px;
+  }
+  .ob-line { font-size: 13px; }
+  .ob-toasts { top: calc(60px + env(safe-area-inset-top)); }
+  .ob-toast { padding: 8px 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

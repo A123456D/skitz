@@ -140,6 +140,68 @@ describe('aim-time camera behavior', () => {
   });
 });
 
+describe('mobile-first framing (phone landscape is canonical)', () => {
+  const b = { cx: 0, cy: 0, rx: 1600, ry: 620 };
+
+  it('small viewports use a tighter fit margin so the course fills the screen', () => {
+    const phone = new Camera();
+    phone.setView(844, 390); // canonical phone landscape
+    phone.frame(b, true);
+    const desk = new Camera();
+    desk.setView(1280, 800);
+    desk.frame(b, true);
+    expect(phone.fitMargin).toBeCloseTo(1.04, 2);
+    expect(desk.fitMargin).toBeCloseTo(1.18, 2);
+    expect(phone.fitMargin).toBeLessThan(desk.fitMargin);
+    // tighter margin -> the course fills a larger fraction of the viewport
+    // (absolute scale is not comparable across different-sized viewports)
+    const coverage = (cam: Camera): number => (cam.scale * 2 * b.rx) / cam.viewW;
+    expect(coverage(phone)).toBeGreaterThan(coverage(desk));
+    expect(phone.scale).toBeCloseTo(fitScale(844, 390, b.rx, b.ry, 1.04), 10);
+    // a 740x360 phone is small too
+    const tiny = new Camera();
+    tiny.setView(740, 360);
+    expect(tiny.fitMargin).toBeCloseTo(1.04, 2);
+  });
+
+  it('margin and follow derive from the LIVE viewport (setView/frame/refit)', () => {
+    const cam = new Camera();
+    cam.setView(1280, 800);
+    cam.frame(b, true);
+    expect(cam.fitMargin).toBeCloseTo(1.18, 2);
+    cam.setView(844, 390); // rotate/resize without reconstructing
+    cam.refit(b);
+    expect(cam.fitMargin).toBeCloseTo(1.04, 2);
+    expect(cam.scale).toBeCloseTo(fitScale(844, 390, b.rx, b.ry, 1.04), 10);
+    cam.frame(b, true); // frame() picks up the new size too
+    expect(cam.scale).toBeCloseTo(fitScale(844, 390, b.rx, b.ry, 1.04), 10);
+  });
+
+  it('flight follow cap is larger on phones (camera sticks closer to the ball)', () => {
+    const phone = new Camera();
+    phone.setView(844, 390);
+    phone.frame(b, true);
+    const desk = new Camera();
+    desk.setView(1280, 800);
+    desk.frame(b, true);
+    expect(phone.followCapFraction).toBeGreaterThan(desk.followCapFraction);
+    expect(phone.followDistFraction).toBeGreaterThan(desk.followDistFraction);
+
+    // behavior: a distant ball ends up closer to screen center on the phone
+    const ball = { x: 1200, y: 0 };
+    for (let i = 0; i < 240; i++) {
+      phone.update(1 / 60, ball, true);
+      desk.update(1 / 60, ball, true);
+    }
+    const onScreenPhone = Math.abs(ball.x - phone.cx) * phone.scale;
+    const onScreenDesk = Math.abs(ball.x - desk.cx) * desk.scale;
+    expect(onScreenPhone).toBeLessThan(onScreenDesk);
+    // and between strokes the desktop contract still holds: eased back home
+    for (let i = 0; i < 240; i++) phone.update(1 / 60, ball, false);
+    expect(Math.abs(phone.cx)).toBeLessThan(1);
+  });
+});
+
 describe('damping / decay primitives', () => {
   it('expDamp is frame-rate independent (2x30ms ~= 1x60ms)', () => {
     const a = expDamp(100, 0, 4, 1 / 30);
