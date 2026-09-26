@@ -10,7 +10,7 @@ import type { World } from '../../sim/types';
 import { HOLE_CAPTURE_R } from '../../sim/world';
 import type { PinGhost } from '../api';
 import { beaconPulse, clamp, expDamp, mixRGB } from '../core';
-import { AMBER, DANGER, GREEN, GREEN_WARM, TexFactory } from '../textures';
+import { AMBER, DANGER, GREEN, TexFactory } from '../textures';
 
 const PAIR_COLORS = [0x7fd8e8, 0xe8a06f, 0xc9a0ff, 0x8affc1];
 
@@ -57,13 +57,9 @@ export class ObjectsLayer {
   private greenBands!: Sprite;  // additive mown-band shimmer over the pad
   private holeRing!: Sprite;
   private holeCup!: Sprite;
-  private holeFlagC!: Container;
-  private holeFlag!: Sprite;
   private holeCapture!: Sprite;
   private holeBeacon!: Sprite;  // deterministic pulse ring (core.beaconPulse)
   private holeShaft!: Sprite;   // soft vertical light above the cup
-  private flagGlow!: Sprite;
-  private holePole!: Graphics;
   private pins: PinView[] = [];
   private ghost: Container;
   private ghostShard!: Sprite;
@@ -71,8 +67,6 @@ export class ObjectsLayer {
   private bodyIdx = new Map<string, number>();
   private zoneIdx = new Map<string, number>();
   private t = 0;
-  private lastHoleX = 0;
-  private lastHoleY = 0;
   private holeCapR = 16;
   private beaconOut = { d: 0, a: 0 };
 
@@ -429,31 +423,9 @@ export class ObjectsLayer {
     this.holeShaft.width = 51;
     this.holeShaft.height = 144;
     this.holeShaft.position.set(0, -4);
-    // soft light behind the flag head — reads against any sky
-    this.flagGlow = new Sprite(this.tex.glow(64));
-    this.flagGlow.anchor.set(0.5);
-    this.flagGlow.tint = GREEN_WARM;
-    this.flagGlow.blendMode = 'add';
-    this.flagGlow.alpha = 0.3;
-    this.flagGlow.width = 46;
-    this.flagGlow.height = 46;
-    this.flagGlow.position.set(0, -26);
-    // flag pin
-    this.holeFlagC = new Container();
-    this.holePole = new Graphics();
-    this.holePole.rect(-1.2, -34, 2.4, 40).fill({ color: 0xf2ecdc, alpha: 1 });
-    // light pole cap
-    this.holePole.rect(-2.6, -35.5, 5.2, 3.2).fill({ color: 0xffffff, alpha: 0.95 });
-    this.holeFlag = new Sprite(this.tex.flag(30, 20));
-    this.holeFlag.anchor.set(0, 0);
-    this.holeFlag.position.set(1, -34);
-    this.holeFlag.tint = 0xbef2c8; // brighter pennant; dark outline baked in texture
-    this.holeFlag.scale.set(1.05);
-    this.holeFlagC.addChild(this.holePole, this.holeFlag);
     h.addChild(
       this.holeShade, this.greenPad, this.greenBands, this.holeCapture,
       this.holeCup, this.holeRing, this.holeBeacon, this.holeShaft,
-      this.flagGlow, this.holeFlagC,
     );
   }
 
@@ -635,14 +607,6 @@ export class ObjectsLayer {
     beaconPulse(w.t, this.holeCapR, this.beaconOut);
     this.holeBeacon.width = this.holeBeacon.height = this.beaconOut.d;
     this.holeBeacon.alpha = this.beaconOut.a;
-    // hole glides along its path — flag leans into the motion
-    const holeVx = (w.holeX - this.lastHoleX) / Math.max(dt, 1e-4);
-    const holeVy = (w.holeY - this.lastHoleY) / Math.max(dt, 1e-4);
-    this.lastHoleX = w.holeX;
-    this.lastHoleY = w.holeY;
-    this.holeFlagC.skew.x = Math.sin(this.t * 2.2) * 0.1 + clamp(holeVx * 0.0004, -0.2, 0.2);
-    this.holeFlagC.rotation = clamp(holeVy * 0.0006, -0.15, 0.15);
-
     // --- pins
     for (let i = 0; i < this.pins.length; i++) {
       const pv = this.pins[i];

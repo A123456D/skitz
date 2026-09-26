@@ -29,6 +29,9 @@ export const PIN_INFLUENCE_R = 260;
 export const MAX_LAUNCH_SPEED = 900;
 export const HOLE_CAPTURE_R = 30;
 export const BOOST_IMPULSE = 200;
+/** Cup funnel: slow balls near the cup get curled in — real cups hold the ball. */
+export const CUP_FUNNEL_R_MULT = 2.6;
+export const CUP_FUNNEL_A = 90;
 
 const f1: FieldSample = makeFieldSample();
 const f2: FieldSample = makeFieldSample();
@@ -549,6 +552,15 @@ export function stepTick(w: World, ghost = false): void {
   if (!ball.dead) {
     const hd = Math.hypot(ball.x - w.holeX, ball.y - w.holeY);
     const capture = w.def.hole.captureR ?? HOLE_CAPTURE_R;
+    // funnel: gentle pull toward the cup, strongest at the rim, zero at the edge.
+    // Slow misses curl in, lip-riders trickle in; fast rattle-outs outrun it.
+    const funnelR = capture * CUP_FUNNEL_R_MULT;
+    if (hd < funnelR && hd > 1) {
+      const t = 1 - hd / funnelR;
+      const a = CUP_FUNNEL_A * t * t * (3 - 2 * t) * w.gravityScale;
+      ball.vx += ((w.holeX - ball.x) / hd) * a * STEP_DT;
+      ball.vy += ((w.holeY - ball.y) / hd) * a * STEP_DT;
+    }
     if (hd < capture) {
       const speed = Math.hypot(ball.vx, ball.vy);
       if (speed < SINK_SPEED) {
