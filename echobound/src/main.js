@@ -119,11 +119,12 @@ function tick() {
 function drawPickups(R) {
   for (const k of G.pickups) {
     const bob = Math.sin(G.time * 5 + k.x) * 2;
+    const pulse = 0.75 + Math.sin(G.time * 6 + k.x * 0.7) * 0.25;
     if (k.kind !== 'shard') R.q('shadow', k.x, k.y + 6, { sx: 0.4, sy: 0.3, alpha: 0.3, layer: L.SHADOW });
     const spr = k.kind === 'shard' ? 'shard' : k.kind === 'heart' ? 'heart' : 'story';
     const col = k.kind === 'shard' ? '#7dff9b' : k.kind === 'heart' ? '#7dff9b' : '#ffd75e';
-    R.q(spr, k.x, k.y + bob, { ay: 0.5, layer: L.ENT });
-    if (k.kind !== 'shard') R.q('glow', k.x, k.y + bob, { sx: 0.5, sy: 0.5, tint: col, alpha: 0.3, layer: L.GLOW });
+    R.q(spr, k.x, k.y + bob, { ay: 0.5, layer: L.ENT, alpha: k.kind === 'shard' ? pulse : 1 });
+    R.q('glow', k.x, k.y + bob, { sx: k.kind === 'shard' ? 0.28 : 0.5, sy: k.kind === 'shard' ? 0.28 : 0.5, tint: col, alpha: (k.kind === 'shard' ? 0.18 : 0.3) * pulse, layer: L.GLOW });
   }
 }
 

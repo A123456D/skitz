@@ -362,6 +362,7 @@ function die(e, o = {}) {
   // feedback
   const big = e.boss || e.elite || bigSet.has(e.type);
   const fam = FAMILY[e.type] || ['#c96a4a', '#43201a'];
+  FX.flashSpr(e.x, e.y - 6, 'muzzle', rand(0, TAU), big ? 2.6 : 1.6, '#ffffff', 0.09);
   FX.gibs(e.x, e.y - 6, big ? 14 : 6, fam[0]);
   FX.splat(e.x, e.y + 4, fam[1], big ? 1.5 : 1);
   FX.burst(e.x, e.y, big ? 20 : 9, { col: big ? '#ff8a4a' : '#c96a4a', spd: big ? 260 : 150, life: 0.45, size: big ? 3 : 2 });

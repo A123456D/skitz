@@ -89,7 +89,7 @@ export function fireOnce(sh) {
     });
   }
   if (sh.src === 'p') {
-    FX.flashSpr(sh.x + Math.cos(sh.aim) * 22, sh.y + Math.sin(sh.aim) * 22, 'muzzle', sh.aim, 1.2);
+    FX.flashSpr(sh.x + Math.cos(sh.aim) * 26, sh.y + Math.sin(sh.aim) * 26, 'muzzle', sh.aim, 1.7, '#fff8e0', 0.08);
     A.sfx(sh.weapon === 'grave' ? 'shoot_gc' : 'shoot_widow');
   } else if (sh.src === 'echo') A.sfx('shoot_widow');
   G.profile.shots += n;

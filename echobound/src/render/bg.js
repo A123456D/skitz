@@ -10,16 +10,33 @@ export function buildBackgrounds() {
 
   const gt = document.createElement('canvas'); gt.width = gt.height = 128;
   const gg = gt.getContext('2d');
-  gg.fillStyle = '#151a26'; gg.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 300; i++) { gg.fillStyle = rng.f() < 0.5 ? '#111622' : '#1b2232'; gg.fillRect(rng.int(0, 127), rng.int(0, 127), 1 + rng.int(0, 1), 1); }
-  gg.strokeStyle = '#0e1119'; gg.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    gg.beginPath(); let x = rng.int(10, 118), y = rng.int(10, 118); gg.moveTo(x, y);
-    for (let s = 0; s < 4; s++) { x += rng.int(-14, 14); y += rng.int(-14, 14); gg.lineTo(x, y); }
+  // worn asphalt: value-structured, not flat — aggregate, slabs, stains, markings
+  gg.fillStyle = '#1b2130'; gg.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 200; i++) { gg.fillStyle = i % 3 ? '#1f2637' : '#171c2a'; gg.fillRect(rng.int(0, 127), rng.int(0, 127), 2, 2); }
+  for (let i = 0; i < 160; i++) { gg.fillStyle = i % 2 ? '#232b3f' : '#141926'; gg.fillRect(rng.int(0, 127), rng.int(0, 127), 1, 1); }
+  // slab seams
+  gg.fillStyle = '#12161f'; gg.fillRect(0, 62, 128, 2); gg.fillRect(62, 0, 2, 62);
+  gg.fillStyle = '#272f44'; gg.fillRect(0, 64, 128, 1); gg.fillRect(64, 0, 1, 62);
+  // patched tarmac
+  gg.fillStyle = '#171b27'; gg.beginPath(); gg.arc(30, 30, 14, 0, 7); gg.fill();
+  gg.fillStyle = '#20283a'; gg.beginPath(); gg.arc(96, 90, 11, 0, 7); gg.fill();
+  gg.fillStyle = '#242c40'; gg.fillRect(8, 92, 20, 3);
+  // cracks
+  gg.strokeStyle = '#0e1119'; gg.lineWidth = 1.5;
+  for (let i = 0; i < 4; i++) {
+    gg.beginPath(); let x = rng.int(6, 122), y = rng.int(6, 122); gg.moveTo(x, y);
+    for (let s = 0; s < 4; s++) { x += rng.int(-16, 16); y += rng.int(-16, 16); gg.lineTo(x, y); }
     gg.stroke();
   }
-  gg.fillStyle = 'rgba(190,200,220,.07)'; gg.fillRect(0, 60, 128, 6);
-  gg.beginPath(); gg.arc(96, 30, 9, 0, 7); gg.fillStyle = '#10141d'; gg.fill(); gg.strokeStyle = '#232b3d'; gg.stroke();
+  // oil stain with sheen
+  gg.fillStyle = '#10141d'; gg.beginPath(); gg.ellipse(70, 40, 16, 9, 0.4, 0, 7); gg.fill();
+  gg.fillStyle = '#2a3450'; gg.fillRect(64, 36, 6, 1); gg.fillRect(74, 42, 4, 1);
+  // worn lane paint
+  gg.fillStyle = 'rgba(214,220,235,.13)'; gg.fillRect(0, 92, 44, 6); gg.fillRect(56, 92, 30, 6);
+  gg.fillStyle = 'rgba(214,220,235,.07)'; gg.fillRect(96, 92, 32, 6);
+  // manhole
+  gg.beginPath(); gg.arc(96, 30, 10, 0, 7); gg.fillStyle = '#12161f'; gg.fill(); gg.strokeStyle = '#2a3244'; gg.lineWidth = 2; gg.stroke();
+  gg.strokeStyle = '#0c0f16'; gg.lineWidth = 1; gg.beginPath(); gg.arc(96, 30, 6, 0, 7); gg.stroke();
 
   const sky = document.createElement('canvas'); sky.width = 4; sky.height = 256;
   const sg = sky.getContext('2d');
@@ -60,7 +77,18 @@ export function buildBackgrounds() {
     for (let i = 0; i < 12; i++) { g.fillStyle = rng.f() < 0.3 ? '#8a6b3f' : '#253554'; g.fillRect(rng.int(0, W), rng.int(h - 60, h - 12), 2, 3); }
   });
 
-  return { ground: gt, sky, bg1, bg2, bg3 };
+  return { ground: gt, sky, bg1: fadeBottom(bg1), bg2: fadeBottom(bg2), bg3: fadeBottom(bg3) };
+}
+
+// strips dissolve into the ground instead of ending in a hard edge
+function fadeBottom(cv) {
+  const c = cv.getContext('2d');
+  const gr = c.createLinearGradient(0, cv.height, 0, cv.height * 0.45);
+  gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = gr; c.fillRect(0, 0, cv.width, cv.height);
+  c.globalCompositeOperation = 'source-over';
+  return cv;
 }
 
 export function drawBackground(R, G, BG) {

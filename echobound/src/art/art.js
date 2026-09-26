@@ -1,4 +1,6 @@
 // Procedural pixel-art atlas. Every sprite is drawn in code at 1x, then packed.
+import { TAU } from '../core/util.js';
+
 const OUT = '#0a0c14';
 const SPR = 3; // art px -> world units
 
@@ -63,156 +65,197 @@ export function buildAtlas() {
 
   const P = PAL;
 
-  // ---------- characters (3-frame walk cycle: idle, walkA, walkB) ----------
-  const wardenBody = (g, legs) => {
-    g.R(9, 2, 7, 7, '#3d5c9e'); g.R(8, 4, 9, 4, '#3d5c9e'); // hood
-    g.R(10, 5, 5, 2, '#7ef2ff'); // visor
-    g.R(7, 9, 11, 13, '#33518c'); g.R(8, 9, 9, 11, '#4a6cb0'); // coat
-    g.R(10, 11, 5, 5, '#2f8fb0'); g.px(12, 13, '#d8f6ff'); // heartframe core
-    g.R(5, 10, 3, 9, '#2a4070'); g.R(17, 10, 3, 9, '#2a4070'); // arms
-    if (legs === 0) { g.R(9, 22, 3, 5, '#1a2438'); g.R(13, 22, 3, 5, '#1a2438'); g.R(8, 26, 4, 2, '#141b2c'); g.R(13, 26, 4, 2, '#141b2c'); }
-    else if (legs === 1) { g.R(8, 22, 3, 4, '#1a2438'); g.R(14, 22, 3, 6, '#1a2438'); g.R(7, 25, 4, 2, '#141b2c'); g.R(14, 27, 4, 2, '#0d1119'); }
-    else { g.R(8, 22, 3, 6, '#1a2438'); g.R(14, 22, 3, 4, '#1a2438'); g.R(7, 27, 4, 2, '#0d1119'); g.R(14, 25, 4, 2, '#141b2c'); }
-    g.px(7, 12, '#9fe8ff'); g.px(18, 14, '#9fe8ff'); g.px(12, 12, '#ffffff');
+  // ---------- characters: chunky, shaded, weapon-in-hand, 4-frame walk ----------
+  // warden 32x40 facing right; frames: 0 idle, 1-3 walk cycle
+  const wardenBody = (g, f) => {
+    const bob = (f === 2) ? 1 : 0;
+    // legs + boots
+    if (f === 0) { g.R(11, 30, 4, 7, '#1a2438'); g.R(17, 30, 4, 7, '#1a2438'); g.R(10, 36, 5, 2, '#0f141f'); g.R(17, 36, 5, 2, '#0f141f'); }
+    else if (f === 1) { g.R(9, 30, 4, 6, '#1a2438'); g.R(18, 30, 4, 8, '#1a2438'); g.R(8, 35, 5, 2, '#0f141f'); g.R(18, 37, 5, 2, '#0f141f'); }
+    else if (f === 2) { g.R(11, 30, 4, 7, '#1a2438'); g.R(17, 30, 4, 7, '#1a2438'); g.R(10, 36, 5, 2, '#0f141f'); g.R(17, 36, 5, 2, '#0f141f'); }
+    else { g.R(10, 30, 4, 8, '#1a2438'); g.R(19, 30, 4, 6, '#1a2438'); g.R(9, 37, 5, 2, '#0f141f'); g.R(19, 35, 5, 2, '#0f141f'); }
+    // long coat: base + shadow side + lit panels
+    g.R(8, 14 + bob, 15, 17, '#33518c');
+    g.R(8, 14 + bob, 4, 17, '#274070');
+    g.R(12, 16 + bob, 9, 6, '#41619f');
+    g.R(9, 27 + bob, 13, 3, '#22355c');
+    g.px(8, 15 + bob, '#5a7fc0'); g.px(9, 14 + bob, '#5a7fc0');
+    g.R(21, 16 + bob, 2, 12, '#274070');
+    // scarf accent (magenta identity)
+    g.R(13, 12 + bob, 7, 3, '#b03a92'); g.px(14, 11 + bob, '#ff5ad2'); g.px(20, 12 + bob, '#ff5ad2');
+    // hood + void face with emissive visor
+    g.R(11, 3 + bob, 10, 9, '#2c4170'); g.R(12, 2 + bob, 8, 3, '#3a5488');
+    g.px(11, 4 + bob, '#5a7fc0'); g.R(14, 6 + bob, 5, 2, '#0c1220');
+    g.R(14, 6 + bob, 5, 1, '#7ef2ff');
+    // heartframe core (emissive)
+    g.R(14, 18 + bob, 5, 5, '#1d3a5c'); g.R(15, 19 + bob, 3, 3, '#2f8fb0'); g.px(16, 20 + bob, '#d8f6ff');
+    // arms forward + HAND CANNON
+    g.R(19, 20 + bob, 8, 3, '#2c4170');
+    g.R(17, 23 + bob, 6, 3, '#22355c');
+    g.R(24, 18 + bob, 8, 5, '#39445c');
+    g.R(24, 18 + bob, 8, 2, '#55627a');
+    g.R(22, 19 + bob, 3, 6, '#2c3648');
+    g.R(25, 23 + bob, 2, 3, '#1c2434');
+    g.px(32, 20 + bob, '#7ef2ff');
+    g.px(23, 21 + bob, '#8fd6ff');
   };
-  for (let f = 0; f < 3; f++) spr('warden' + f, 24, 28, (g) => wardenBody(g, f), { ay: 0.92 });
-  spr('runner', 22, 28, (g) => {
-    g.R(8, 2, 7, 6, '#5a3a52'); g.R(9, 4, 4, 2, '#ffd0e8'); // head+hair band
-    g.R(7, 8, 8, 10, '#6b4258'); // jacket
-    g.R(4, 8, 3, 8, '#5a3a52'); g.R(15, 9, 3, 7, '#5a3a52'); // arms swing
-    g.R(15, 6, 6, 2, P.mag); // scarf trail
-    g.R(8, 18, 3, 7, '#2a2438'); g.R(12, 17, 3, 8, '#2a2438');
-    g.R(7, 25, 5, 2, '#e6e6f0'); g.R(12, 24, 5, 2, '#e6e6f0'); // sneakers
-  }, { ay: 0.92 });
+  for (let f = 0; f < 4; f++) spr('warden' + f, 32, 40, (g) => wardenBody(g, f), { ay: 0.94 });
+  spr('runner', 24, 30, (g) => {
+    g.R(6, 26, 4, 3, '#0f141f'); g.R(14, 25, 4, 3, '#0f141f');
+    g.R(6, 14, 12, 13, '#6b4258'); g.R(6, 14, 4, 13, '#573549'); g.R(9, 16, 7, 5, '#7d5069');
+    g.px(6, 15, '#96688a');
+    g.R(16, 12, 7, 2, '#ff5ad2'); g.px(22, 11, '#ff5ad2'); g.px(23, 13, '#ff5ad2');
+    g.R(8, 4, 9, 8, '#5a3a52'); g.R(9, 3, 7, 3, '#6d4a64'); g.R(10, 7, 5, 2, '#ffd0e8');
+    g.px(10, 7, '#ff9de0');
+    g.R(16, 16, 5, 2, '#c9b493'); g.px(21, 16, '#f4f8ff');
+  }, { ay: 0.94 });
 
-  spr('ghost', 24, 28, (g) => {
-    // drawn in greys so render tint colors it; echo of the warden
-    g.R(9, 2, 7, 7, '#c8c8c8'); g.R(8, 4, 9, 4, '#c8c8c8');
-    g.R(10, 5, 5, 2, '#ffffff');
-    g.R(7, 9, 11, 13, '#b8b8b8'); g.R(8, 9, 9, 11, '#d4d4d4');
-    g.R(10, 11, 5, 5, '#909090'); g.px(12, 13, '#ffffff');
-    g.R(5, 10, 3, 9, '#a8a8a8'); g.R(17, 10, 3, 9, '#a8a8a8');
-    g.R(9, 22, 3, 5, '#989898'); g.R(13, 22, 3, 5, '#989898');
-    g.R(8, 26, 4, 2, '#888888'); g.R(13, 26, 4, 2, '#888888');
-  }, { ay: 0.92, noOutline: true, noShade: true });
+  spr('ghost', 32, 40, (g) => {
+    // grey warden (tinted at render): same silhouette + weapon so echoes read as YOU
+    g.R(11, 30, 4, 7, '#b0b0b0'); g.R(17, 30, 4, 7, '#b0b0b0');
+    g.R(8, 14, 15, 17, '#c8c8c8'); g.R(8, 14, 4, 17, '#b4b4b4'); g.R(12, 16, 9, 6, '#dadada');
+    g.R(13, 12, 7, 3, '#e0e0e0');
+    g.R(11, 3, 10, 9, '#d0d0d0'); g.R(14, 6, 5, 2, '#ffffff');
+    g.R(14, 18, 5, 5, '#9a9a9a'); g.px(16, 20, '#ffffff');
+    g.R(19, 20, 8, 3, '#c0c0c0'); g.R(24, 18, 8, 5, '#a8a8a8'); g.px(32, 20, '#ffffff');
+  }, { ay: 0.94, noOutline: true, noShade: true });
 
-  // ---------- enemies (2-frame walk cycles where legs show) ----------
+  // ---------- enemies: saturated families, emissive eyes, real silhouettes ----------
   const huskBody = (g, f) => {
-    g.ell(11, 12, 8, 8, P.rust); g.ell(11, 8, 6, 5, '#9c5a48'); // hunched body
-    g.R(8, 5, 6, 4, '#7a4438'); // head low
-    g.px(10, 7, P.amber); g.px(12, 7, P.amber); // eyes
-    g.R(3, 12, 4, 8, '#6b3a30'); g.R(16, 12, 4, 8, '#6b3a30'); // dragging arms
-    g.ell(8, 6, 3, 2, P.bone); g.R(14, 16, 4, 3, P.bone); // bone plates
-    if (f === 0) { g.R(8, 19, 3, 3, P.rustD); g.R(12, 20, 3, 2, P.rustD); }
-    else { g.R(8, 20, 3, 2, P.rustD); g.R(12, 19, 3, 3, P.rustD); }
+    // bloated corpse-walker: burnt orange, bone ribs, one big amber eye
+    g.ell(12, 14, 10, 9, '#6e2c18');            // under-mass (shadow tone)
+    g.ell(12, 12, 9, 8, '#a04a28');             // body
+    g.ell(11, 10, 7, 5, '#c05f34');             // lit hump
+    g.ell(8, 8, 3, 2, '#d97a4a');               // rim highlight
+    g.R(9, 3, 8, 5, '#7d3a1e');                 // head
+    g.ell(13, 5, 2, 1.6, '#ffd75e'); g.px(13, 5, '#fff2b0'); // big emissive eye
+    g.ell(6, 11, 3, 2, '#d8c9a8');              // bone plates
+    g.ell(15, 17, 4, 2, '#d8c9a8');
+    g.R(14, 18, 2, 3, '#e8dcbe'); g.px(14, 17, '#fff'); // spine ridge
+    if (f === 0) { g.R(2, 13, 5, 3, '#8a3a20'); g.R(19, 13, 5, 3, '#8a3a20'); g.R(2, 16, 4, 6, '#6e2c18'); g.R(20, 16, 4, 5, '#6e2c18'); }
+    else { g.R(2, 10, 5, 3, '#8a3a20'); g.R(19, 10, 5, 3, '#8a3a20'); g.R(2, 13, 4, 5, '#6e2c18'); g.R(20, 13, 4, 6, '#6e2c18'); }
   };
-  for (let f = 0; f < 2; f++) spr('husk' + f, 22, 22, (g) => huskBody(g, f), { ay: 0.9 });
+  for (let f = 0; f < 2; f++) spr('husk' + f, 26, 22, (g) => huskBody(g, f), { ay: 0.9 });
 
   const lancerBody = (g, f) => {
-    g.R(7, 2, 7, 6, '#9c5540'); g.px(9, 5, P.amber); g.px(12, 5, P.amber); // head
-    g.R(6, 8, 9, 10, '#8a4a3a'); // torso
-    g.R(4, 9, 3, 8, '#7a4034'); g.R(14, 9, 3, 8, '#7a4034'); // arms
-    g.R(2, 12, 18, 2, P.bone); g.tri([19, 12, 19, 13, 22, 12.5], P.ember); // lance
-    if (f === 0) { g.R(7, 18, 3, 10, P.rustD); g.R(11, 18, 3, 9, P.rustD); g.R(6, 27, 4, 2, '#4a2820'); g.R(11, 26, 4, 2, '#4a2820'); }
-    else { g.R(7, 18, 3, 9, P.rustD); g.R(11, 18, 3, 10, P.rustD); g.R(6, 26, 4, 2, '#4a2820'); g.R(11, 27, 4, 2, '#4a2820'); }
+    // crimson pike-trooper: tall, caped, glowing lance tip
+    g.R(9, 2, 8, 7, '#a03a2c'); g.R(10, 3, 6, 4, '#b8483a'); // head+crest
+    g.ell(11, 5, 1.6, 1.6, '#ffd75e'); g.px(15, 5, '#ffd75e'); // eyes
+    g.R(7, 9, 11, 11, '#8f3026'); g.R(8, 10, 8, 5, '#a8483a'); // torso
+    g.tri([7, 9, 3, 26, 9, 20], '#5e1e16'); // cape (shadow red)
+    g.R(5, 10, 3, 9, '#7a2820'); g.R(17, 10, 3, 8, '#7a2820'); // arms
+    g.R(1, 13, 23, 2, '#d8c9a8'); g.px(23, 13, '#ff8a4a'); g.px(24, 13, '#ffd75e'); // lance + ember tip
+    if (f === 0) { g.R(9, 20, 3, 13, '#6e241c'); g.R(14, 20, 3, 11, '#6e241c'); g.R(8, 32, 5, 2, '#3c1410'); g.R(14, 30, 5, 2, '#3c1410'); }
+    else { g.R(9, 20, 3, 11, '#6e241c'); g.R(14, 20, 3, 13, '#6e241c'); g.R(8, 30, 5, 2, '#3c1410'); g.R(14, 32, 5, 2, '#3c1410'); }
   };
-  for (let f = 0; f < 2; f++) spr('lancer' + f, 20, 30, (g) => lancerBody(g, f), { ay: 0.93 });
+  for (let f = 0; f < 2; f++) spr('lancer' + f, 26, 34, (g) => lancerBody(g, f), { ay: 0.94 });
 
-  spr('mourner', 26, 28, (g) => {
-    g.ell(13, 16, 10, 11, '#4a3f45'); g.ell(13, 8, 6, 6, '#3c3339'); // robe+hood
-    g.R(10, 8, 6, 3, '#14161e'); // hollow face
-    g.px(11, 9, '#9fd8ff'); g.px(14, 9, '#9fd8ff');
-    g.R(4, 14, 4, 12, '#41363c'); g.R(19, 14, 4, 12, '#41363c'); // sleeves
-    g.R(12, 14, 3, 8, '#6a7280'); g.ell(13, 23, 3, 3, '#9fd8ff'); g.px(13, 23, P.white); // lantern
-  }, { ay: 0.92 });
+  spr('mourner', 28, 30, (g) => {
+    // cold widowed robe; raised lantern is the light source of her zone
+    g.ell(14, 18, 11, 11, '#3c4258'); g.ell(14, 17, 9, 9, '#4a5270'); // robe
+    g.R(6, 24, 16, 3, '#31374a'); // hem shadow
+    g.ell(14, 7, 7, 6, '#2c3245'); // hood
+    g.R(11, 6, 7, 4, '#0c0f18');  // void face
+    g.px(12, 8, '#9fd8ff'); g.px(16, 8, '#9fd8ff'); // cold eyes
+    g.R(3, 14, 4, 13, '#3a4158'); g.R(22, 14, 4, 10, '#3a4158'); // sleeves
+    g.R(23, 8, 3, 7, '#6a7280'); // lantern post
+    g.ell(24, 17, 3, 4, '#1c2434'); g.ell(24, 17, 2, 2.6, '#bfe9ff'); g.px(24, 17, '#ffffff'); // lantern flame
+    g.px(23, 13, '#bfe9ff'); g.px(26, 14, '#bfe9ff'); // flame rays
+  }, { ay: 0.93 });
 
   const thiefBody = (g, f) => {
-    g.ell(9, 7, 5, 5, '#a8722f'); g.R(6, 4, 7, 3, '#8a5a24'); // head wrap
-    g.R(7, 6, 5, 2, '#14161e'); g.px(8, 6, P.gold); // mask+eye
-    g.R(5, 11, 8, 7, '#8a5a24'); // body
-    g.R(12, 10, 5, 5, P.bone); // sack
-    if (f === 0) { g.R(4, 12, 2, 6, '#7a4e1e'); g.R(13, 12, 2, 5, '#7a4e1e'); g.R(5, 17, 3, 3, '#5e3c16'); g.R(11, 16, 3, 3, '#5e3c16'); }
-    else { g.R(4, 12, 2, 5, '#7a4e1e'); g.R(13, 12, 2, 6, '#7a4e1e'); g.R(5, 16, 3, 3, '#5e3c16'); g.R(11, 17, 3, 3, '#5e3c16'); }
+    // snatched-gold sprinter; grin mask, coin sack
+    g.ell(9, 6, 5, 5, '#c08430'); g.R(5, 2, 8, 3, '#8a5a24');
+    g.R(6, 5, 6, 2, '#14161e'); g.px(8, 5, '#ffe98a'); // masked eye (emissive)
+    g.R(4, 10, 9, 8, '#a8722f'); g.R(4, 10, 3, 8, '#8a5e24');
+    g.ell(15, 9, 4, 4, '#d8c9a8'); g.R(14, 6, 2, 3, '#a89878'); // sack
+    if (f === 0) { g.R(3, 12, 2, 7, '#8a5e24'); g.R(13, 12, 2, 5, '#8a5e24'); g.R(2, 18, 4, 2, '#5e3c16'); g.R(12, 16, 4, 2, '#5e3c16'); }
+    else { g.R(3, 12, 2, 5, '#8a5e24'); g.R(13, 12, 2, 7, '#8a5e24'); g.R(2, 16, 4, 2, '#5e3c16'); g.R(12, 18, 4, 2, '#5e3c16'); }
   };
-  for (let f = 0; f < 2; f++) spr('thief' + f, 18, 20, (g) => thiefBody(g, f), { ay: 0.9 });
+  for (let f = 0; f < 2; f++) spr('thief' + f, 20, 20, (g) => thiefBody(g, f), { ay: 0.9 });
 
-  spr('leech', 18, 14, (g) => {
-    g.ell(9, 7, 8, 6, '#b0563a'); g.ell(9, 6, 7, 4, '#c46a48');
-    g.ell(9, 8, 4, 3, '#5e2418'); // mouth
-    for (let i = -1; i <= 1; i++) { g.px(9 + i * 2, 6, P.white); g.px(9 + i * 2, 9, P.white); }
-    g.ell(4, 11, 2, 2, '#8a3a28'); g.ell(14, 11, 2, 2, '#8a3a28');
+  spr('leech', 20, 15, (g) => {
+    // engorged bite-blob: drool glow, tooth ring
+    g.ell(10, 8, 9, 6, '#7d2416'); g.ell(10, 7, 8, 4, '#b0432c'); g.ell(9, 6, 5, 2, '#cf5c3e');
+    g.ell(10, 10, 4, 2.6, '#3c0d08');
+    for (let i = -1; i <= 1; i++) { g.px(10 + i * 2, 8, '#ffece0'); g.px(10 + i * 2, 11, '#ffece0'); }
+    g.px(4, 12, '#8fd6ff'); g.px(17, 12, '#8fd6ff'); // drool
+    g.ell(3, 12, 2, 2, '#8a3018'); g.ell(17, 12, 2, 2, '#8a3018');
   }, { ay: 0.9 });
 
-  spr('mirror', 20, 26, (g) => {
-    g.tri([10, 1, 17, 10, 10, 24, 3, 10], '#5f6a7a'); // shard body
-    g.tri([10, 4, 14, 10, 10, 20, 6, 10], '#7a8aa0');
-    g.R(8, 9, 2, 4, '#aab6c8'); g.px(12, 13, '#aab6c8'); // shine
-    g.R(9, 8, 3, 2, P.amber); g.px(9, 14, P.amber); g.px(11, 16, P.amber); // amber cracks
+  spr('mirror', 24, 30, (g) => {
+    // glass shard golem: cold facets + hot cracks
+    g.tri([12, 1, 21, 12, 12, 28, 3, 12], '#3f6a80');
+    g.tri([12, 3, 18, 12, 12, 24, 6, 12], '#6698b0');
+    g.tri([12, 6, 15, 12, 12, 20, 9, 12], '#8fc4d8');
+    g.R(10, 10, 2, 5, '#c8ecf8'); g.px(14, 14, '#c8ecf8'); // shine
+    g.px(9, 9, '#ffb454'); g.px(13, 15, '#ffb454'); g.px(10, 20, '#ffb454'); g.R(10, 8, 3, 2, '#ffb454'); // cracks
+    g.px(12, 10, '#ffffff');
   }, { ay: 0.92 });
 
-  spr('timeeater', 26, 26, (g) => {
-    g.ell(13, 13, 11, 11, P.bronzeD); g.ell(13, 13, 9, 9, P.bronze);
-    g.ell(13, 13, 7, 7, '#e6d9b8'); // clock face
-    g.R(12, 7, 2, 7, '#3a3020'); g.R(13, 12, 5, 2, '#3a3020'); // hands
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; g.px(13 + Math.round(Math.cos(a) * 8), 13 + Math.round(Math.sin(a) * 8), '#8a7050'); }
-    g.ell(6, 4, 3, 3, '#6b5a3f'); g.ell(20, 21, 3, 3, '#6b5a3f'); // bolts
-    g.px(10, 10, P.red); // single red pupil center
+  spr('timeeater', 30, 30, (g) => {
+    // brass chronovore: clock face body, hand-arms, red pupil
+    g.ell(15, 16, 13, 12, '#6e5528'); g.ell(15, 15, 11, 10, '#b08a3f'); g.ell(15, 14, 9, 8, '#e8d9b0');
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; g.px(15 + Math.round(Math.cos(a) * 8), 14 + Math.round(Math.sin(a) * 7), '#8a7050'); }
+    g.R(14, 8, 2, 8, '#3a3020'); g.R(15, 13, 6, 2, '#3a3020'); // hands
+    g.ell(15, 14, 2, 2, '#c9302a'); g.px(15, 14, '#ff6a5a');   // red pupil (emissive)
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + 0.39; g.ell(15 + Math.round(Math.cos(a) * 13), 15 + Math.round(Math.sin(a) * 12), 2, 2, '#8a6b3f'); } // gear teeth
+    g.ell(5, 3, 3, 3, '#6e5528'); g.ell(26, 26, 3, 3, '#6e5528');
   }, { ay: 0.9 });
 
-  spr('parasite', 24, 12, (g) => {
-    for (let i = 0; i < 4; i++) g.ell(4 + i * 5, 7 + (i % 2), 3, 4 - (i === 3 ? 1 : 0), i % 2 ? '#b08a3a' : '#9a7830');
-    g.R(19, 4, 4, 5, '#8a6b2a'); g.px(21, 5, P.ember); g.px(21, 7, P.ember);
-    g.R(2, 10, 3, 2, '#7a5c26'); g.R(8, 10, 3, 2, '#7a5c26'); g.R(14, 10, 3, 2, '#7a5c26');
+  spr('parasite', 28, 13, (g) => {
+    // undead centipede: plates, mandibles, ember eyes
+    for (let i = 0; i < 4; i++) g.ell(5 + i * 6, 7 + (i % 2), 4, 5 - (i === 3 ? 1 : 0), i % 2 ? '#a8802e' : '#8a6a26');
+    for (let i = 0; i < 4; i++) g.px(4 + i * 6, 4 + (i % 2), '#d8b856'); // spine glow
+    g.R(21, 3, 6, 6, '#7a5c1e'); g.px(24, 4, '#ff8a4a'); g.px(24, 7, '#ff8a4a');
+    g.tri([27, 4, 30, 3, 27, 6], '#d8c9a8'); g.tri([27, 7, 30, 9, 27, 8], '#d8c9a8'); // mandibles
+    g.R(2, 11, 4, 2, '#6e521c'); g.R(9, 11, 4, 2, '#6e521c'); g.R(16, 11, 4, 2, '#6e521c');
   }, { ay: 0.85 });
 
-  spr('witness', 24, 24, (g) => {
-    g.ell(12, 14, 9, 8, '#4a3c30'); g.ell(12, 9, 6, 5, '#5a4a3a'); // cloak+hood
-    g.ell(12, 11, 7, 6, P.bone); g.ell(12, 11, 5, 5, '#efe6d0'); // eye
-    g.ell(12, 11, 2.5, 2.5, P.amber); g.px(12, 11, '#3a2a10'); // iris
-    g.ell(5, 20, 2, 3, '#3c3128'); g.ell(19, 20, 2, 3, '#3c3128'); // tail tatters
+  spr('witness', 28, 28, (g) => {
+    // it watches: ash cloak, one enormous amber eye
+    g.ell(14, 16, 11, 10, '#3c3428'); g.ell(14, 9, 7, 6, '#4a4032');
+    g.ell(14, 12, 9, 7, '#efe6d0'); g.ell(14, 12, 6, 5.4, '#f8f2e2');
+    g.ell(14, 12, 3, 3, '#c9782a'); g.ell(14, 12, 1.6, 1.6, '#ffb454'); g.px(14, 12, '#2a1808');
+    g.px(9, 7, '#efe6d0'); g.px(19, 7, '#efe6d0'); // brow nodules
+    g.ell(4, 23, 2, 3, '#2e2820'); g.ell(24, 23, 2, 3, '#2e2820');
   }, { ay: 0.9 });
 
-  spr('clockadd', 16, 16, (g) => {
-    g.ell(8, 9, 6, 6, P.bronzeD); g.ell(8, 9, 4, 4, P.bronze);
-    g.R(7, 2, 2, 4, '#6b5535'); g.R(7, 12, 2, 4, '#6b5535'); g.R(2, 8, 4, 2, '#6b5535'); g.R(10, 8, 4, 2, '#6b5535'); // gear teeth
-    g.px(7, 8, P.ember); g.px(9, 8, P.ember);
+  spr('clockadd', 18, 18, (g) => {
+    g.ell(9, 9, 7, 7, '#6e5528'); g.ell(9, 9, 5, 5, '#b08a3f'); g.ell(9, 9, 3, 3, '#e8d9b0');
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; g.ell(9 + Math.round(Math.cos(a) * 7), 9 + Math.round(Math.sin(a) * 7), 1.6, 1.6, '#8a6b3f'); }
+    g.px(8, 8, '#ff8a4a'); g.px(10, 8, '#ff8a4a');
   }, { ay: 0.9 });
 
-  spr('saint', 64, 72, (g) => {
-    // gear halo behind
-    g.ell(32, 16, 20, 20, '#00000000');
-    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; g.ell(32 + Math.round(Math.cos(a) * 17), 14 + Math.round(Math.sin(a) * 15), 3, 3, P.bronze); }
-    g.ell(32, 14, 13, 11, P.bronzeD); g.ell(32, 14, 10, 8, '#3a3145');
-    g.ell(32, 22, 10, 9, P.bone); g.ell(32, 20, 8, 7, '#e8dcbe'); // head
-    g.R(28, 19, 2, 3, '#241c14'); g.R(34, 19, 2, 3, '#241c14'); // serene eyes
-    g.R(30, 25, 4, 2, '#b8a482'); // mouth line
-    // robe
-    g.tri([32, 28, 14, 66, 50, 66], '#cfc0a0'); g.tri([32, 28, 20, 64, 44, 64], '#e2d4b2');
-    g.R(28, 34, 8, 10, P.bronze); g.px(31, 38, P.amber); g.px(33, 38, P.amber); // chest relic
-    // arms folded
-    g.R(18, 32, 10, 5, P.bone); g.R(36, 32, 10, 5, P.bone);
-    // gear wings
-    for (const sx of [0, 1]) { const bx = sx ? 50 : 12; g.ell(bx, 36, 7, 7, P.bronzeD); g.ell(bx, 36, 4, 4, P.bronze); g.R(bx - 1, 26, 2, 6, '#6b5535'); }
-    g.R(22, 66, 8, 4, '#a89878'); g.R(34, 66, 8, 4, '#a89878'); // hem
+  spr('saint', 72, 80, (g) => {
+    // the Clockwork Saint: halo of gears, serene bone face, relic heart
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; g.ell(36 + Math.round(Math.cos(a) * 21), 15 + Math.round(Math.sin(a) * 15), 3, 3, '#b08a3f'); g.px(36 + Math.round(Math.cos(a) * 21), 15 + Math.round(Math.sin(a) * 15), '#e8d9b0'); }
+    g.ell(36, 14, 15, 12, '#8a6b3f'); g.ell(36, 14, 12, 9, '#4a4058');
+    g.ell(36, 24, 11, 10, '#efe6d0'); g.ell(36, 21, 9, 8, '#f8f2e2'); // head
+    g.R(31, 21, 3, 3, '#241c14'); g.R(38, 21, 3, 3, '#241c14');
+    g.R(34, 28, 5, 2, '#c9b493');
+    g.tri([36, 32, 15, 74, 57, 74], '#e2d4b2'); g.tri([36, 32, 22, 72, 50, 72], '#f4ecd6'); // robe
+    g.R(31, 38, 10, 11, '#b08a3f'); g.R(33, 40, 6, 6, '#d4b86a'); g.px(35, 42, '#ffe98a'); g.px(37, 43, '#fff4c9'); // relic heart (emissive)
+    g.R(20, 36, 12, 5, '#e8dcbe'); g.R(41, 36, 12, 5, '#e8dcbe'); // folded arms
+    for (const sx of [0, 1]) { const bx = sx ? 56 : 14; g.ell(bx, 40, 8, 8, '#8a6b3f'); g.ell(bx, 40, 5, 5, '#b08a3f'); g.R(bx - 1, 29, 2, 7, '#6b5535'); }
+    g.R(24, 74, 10, 4, '#c9b493'); g.R(38, 74, 10, 4, '#c9b493');
   }, { ay: 0.95 });
 
-  spr('hk', 56, 64, (g) => {
-    // crown
-    g.R(18, 0, 3, 6, P.bronze); g.R(26, 0, 3, 6, P.bronze); g.R(34, 0, 3, 6, P.bronze);
-    g.R(17, 5, 21, 3, P.bronzeD);
-    g.R(19, 8, 18, 12, '#6b3a3a'); g.R(21, 10, 14, 8, '#7d4646'); // head
-    g.R(23, 13, 3, 3, '#ffd0d0'); g.R(30, 13, 3, 3, '#ffd0d0'); // pale eyes
-    g.R(24, 18, 8, 1, '#3a1c1c'); // grim mouth
-    // shoulders massive
-    g.R(6, 20, 44, 12, '#5e3434'); g.R(4, 22, 8, 14, '#4a2a2a'); g.R(44, 22, 8, 14, '#4a2a2a');
-    // chest hollow
-    g.R(20, 24, 16, 16, '#1a1018'); g.ell(28, 32, 5, 5, '#0c0810'); g.px(28, 32, P.red); g.px(27, 31, P.ember); // ember heart
-    g.R(10, 32, 8, 18, '#5e3434'); g.R(38, 32, 8, 18, '#5e3434'); // arms
-    g.R(8, 48, 10, 6, '#4a2a2a'); g.R(38, 48, 10, 6, '#4a2a2a'); // fists
-    g.R(18, 40, 20, 18, '#6b3a3a'); // skirt
-    g.R(16, 58, 10, 5, '#3a2020'); g.R(30, 58, 10, 5, '#3a2020');
-    // tattered cape edge
-    g.R(2, 36, 3, 8, '#412424'); g.R(51, 36, 3, 8, '#412424');
+  spr('hk', 64, 72, (g) => {
+    // the Hollow King: gold crown, hollow chest with ember heart
+    g.R(20, 0, 4, 7, '#e8c878'); g.R(30, 0, 4, 7, '#e8c878'); g.R(40, 0, 4, 7, '#e8c878');
+    g.px(21, 0, '#fff2b0'); g.px(31, 0, '#fff2b0'); g.px(41, 0, '#fff2b0');
+    g.R(18, 6, 28, 3, '#b08a3f');
+    g.R(20, 9, 24, 13, '#6e2c24'); g.R(23, 11, 18, 9, '#87392e');
+    g.R(26, 14, 4, 4, '#ffd0d0'); g.R(34, 14, 4, 4, '#ffd0d0'); g.px(27, 15, '#ff8a8a'); g.px(35, 15, '#ff8a8a');
+    g.R(26, 20, 12, 2, '#2a1010');
+    g.R(6, 22, 52, 13, '#54261e'); g.R(4, 24, 9, 15, '#411c16'); g.R(51, 24, 9, 15, '#411c16');
+    g.R(22, 26, 20, 18, '#170d12'); g.ell(32, 35, 6, 6, '#0c0810'); g.px(32, 35, '#ff5a5a'); g.px(30, 33, '#ff8a4a'); g.px(34, 37, '#c9302a'); // hollow ember heart
+    g.R(11, 35, 9, 20, '#54261e'); g.R(44, 35, 9, 20, '#54261e');
+    g.R(8, 53, 12, 7, '#411c16'); g.R(44, 53, 12, 7, '#411c16');
+    g.R(20, 44, 24, 20, '#6b3026');
+    g.R(17, 63, 12, 6, '#331610'); g.R(35, 63, 12, 6, '#331610');
+    g.R(2, 40, 3, 9, '#4a2018'); g.R(59, 40, 3, 9, '#4a2018');
   }, { ay: 0.95 });
 
   // ---------- bullets / weapons fx ----------
@@ -225,8 +268,14 @@ export function buildAtlas() {
   spr('shock', 20, 20, (g) => { g.R(9, 2, 2, 16, P.pale); g.R(3, 9, 14, 2, P.pale); g.px(6, 6, P.white); g.px(13, 13, P.white); }, { noOutline: true, noShade: true });
 
   // ---------- pickups ----------
-  spr('shard', 8, 10, (g) => { g.tri([4, 0, 8, 5, 4, 10, 0, 5], P.grn); g.tri([4, 2, 6, 5, 4, 8, 2, 5], '#c8ffd8'); }, { ay: 0.5 });
-  spr('heart', 10, 9, (g) => { g.ell(3, 3, 3, 3, P.grn); g.ell(7, 3, 3, 3, P.grn); g.tri([0, 4, 10, 4, 5, 9], P.grn); g.px(3, 3, '#d0ffe0'); }, { ay: 0.5 });
+  spr('shard', 10, 12, (g) => {
+    g.tri([5, 0, 10, 6, 5, 12, 0, 6], '#3fbf74'); g.tri([5, 1, 9, 6, 5, 11, 1, 6], '#5fe894');
+    g.tri([5, 2, 7, 6, 5, 10, 3, 6], '#a8ffcc'); g.px(4, 3, '#ffffff');
+  }, { ay: 0.5, noOutline: true, noShade: true });
+  spr('heart', 12, 11, (g) => {
+    g.ell(3.5, 4, 3.6, 3.6, '#3fbf74'); g.ell(8.5, 4, 3.6, 3.6, '#3fbf74'); g.tri([0, 5, 12, 5, 6, 11], '#3fbf74');
+    g.ell(4, 3, 1.6, 1.6, '#c8ffd8'); g.px(7, 4, '#e8fff0');
+  }, { ay: 0.5, noOutline: true, noShade: true });
   spr('story', 10, 10, (g) => { for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * (Math.PI * 2 / 5); g.ell(5 + Math.round(Math.cos(a) * 4), 5 + Math.round(Math.sin(a) * 4), 1, 1, P.gold); } g.ell(5, 5, 2, 2, '#fff2b0'); }, { ay: 0.5, noOutline: true });
   spr('wisp', 14, 16, (g) => { g.tri([7, 0, 12, 10, 7, 15, 2, 10], P.pale); g.tri([7, 3, 10, 10, 7, 13, 4, 10], P.white); }, { ay: 0.9 });
 
