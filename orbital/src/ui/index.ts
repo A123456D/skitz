@@ -8,6 +8,7 @@ import type { Medal, SaveData, Settings } from '../save/save';
 import type { LevelResult, Screen, UIHandle, UIHooks } from './api';
 import { buildHud, type Hud } from './hud';
 import { buildInstallChip } from './install';
+import { registerOffline } from './offline';
 import {
   buildPause,
   buildResults,
@@ -37,6 +38,7 @@ type UIHooksEx = UIHooks & {
 
 export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
   root.classList.add('ob-root');
+  registerOffline(); // installed PWA plays offline — guarded, dev-port skipped
   const hx = hooks as UIHooksEx;
 
   // --- build layers
@@ -126,6 +128,8 @@ export function mountUI(root: HTMLElement, hooks: UIHooks): UIHandle {
     bindWorld(w: World | null): void {
       if (!w) hud.clear();
       hud.setWorldBound(w !== null);
+      // Fresh level = fresh announce (the integrator rebinds only on entry).
+      hud.announceLevel(w);
     },
 
     updateHud(w: World, pinsPlacedThisStroke: number, objectiveDone: boolean[]): void {

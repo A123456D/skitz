@@ -15,6 +15,8 @@ export interface Hud {
   subtitle(line: StoryLine | null): void;
   /** Show/hide the UNDO PIN button (only meaningful while a world is bound). */
   setWorldBound(v: boolean): void;
+  /** Fresh-level announce: pops the level-name pill (null folds it). */
+  announceLevel(w: World | null): void;
   destroy(): void;
 }
 
@@ -173,10 +175,28 @@ export function buildHud(actions: HudActions): Hud {
     }, SUBTITLE_MS);
   }
 
+  // ------------------------------------------------------------ level pill
+  // Fresh-level announce bound to bindWorld (the integrator rebinds only on
+  // level entry — resume-from-pause never does). The whole entrance/hold/exit
+  // envelope is one CSS animation; JS only (re)adds the class.
+
+  const levelPill = el('div', 'ob-levelpill');
+  let levelKey = '';
+
+  function announceLevel(w: World | null): void {
+    const key = w ? `${w.def.id}|${w.def.name}` : '';
+    if (key === levelKey) return;
+    levelKey = key;
+    levelPill.classList.remove('is-in');
+    if (!w) return;
+    levelPill.textContent = `${w.def.id} · ${w.def.name}`.toUpperCase();
+    void levelPill.offsetWidth; // force reflow so rebinding restarts the animation
+    levelPill.classList.add('is-in');
+  }
+
   // --------------------------------------------------------------- toasts
 
-  const toastsEl = el('div', 'ob-toasts');
-  function toast(text: string, kind: 'good' | 'bad' | 'neutral' = 'neutral'): void {
+  const toastsEl = el('div', 'ob-toasts');  function toast(text: string, kind: 'good' | 'bad' | 'neutral' = 'neutral'): void {
     while (toastsEl.children.length >= 3) toastsEl.firstElementChild?.remove();
     const t = el('div', `ob-toast ob-toast--${kind}`);
     t.textContent = text;
@@ -190,12 +210,13 @@ export function buildHud(actions: HudActions): Hud {
 
   // Subtitle + toasts ride inside the HUD layer: they only ever fire during
   // play, and hiding them with the HUD on results/menu is the desired behavior.
-  root.append(subtitleEl, toastsEl);
+  root.append(subtitleEl, toastsEl, levelPill);
 
   return {
     root,
     subtitle,
     toast,
+    announceLevel,
 
     show(v: boolean): void {
       root.classList.toggle('is-active', v);
@@ -247,6 +268,10 @@ export function buildHud(actions: HudActions): Hud {
       undoKey = '';
       undoBtn.disabled = true;
       undoBtn.classList.add('is-off');
+      // Fold the level pill and forget its level so re-entering the same hole
+      // after quitting re-announces.
+      levelKey = '';
+      levelPill.classList.remove('is-in');
       subtitle(null);
     },
 

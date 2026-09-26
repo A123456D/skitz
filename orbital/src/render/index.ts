@@ -15,6 +15,8 @@ import { ObjectsLayer } from './layers/objects';
 import { MiloLayer } from './layers/milo';
 import { VfxLayer } from './layers/vfx';
 import { PreviewLayer } from './layers/preview';
+import { LastShotLayer } from './layers/lastShot';
+import { HoleHintLayer } from './layers/holeHint';
 
 const MAX_DT = 0.05; // clamp long frames so eased motion never explodes
 const DPR_CAP_FULL = 2;   // full-tier DPR cap (contract)
@@ -38,6 +40,8 @@ class OrbitalRendererImpl implements OrbitalRenderer {
   private milo: MiloLayer;
   private vfx: VfxLayer;
   private preview: PreviewLayer;
+  private lastShot: LastShotLayer;
+  private holeHint: HoleHintLayer;
 
   private lastWorld: World | null = null;
   private switchIdx = new Map<string, number>();
@@ -53,11 +57,15 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.milo = new MiloLayer(this.tex);
     this.vfx = new VfxLayer(this.tex);
     this.preview = new PreviewLayer(this.tex);
+    this.lastShot = new LastShotLayer(this.tex);
+    this.holeHint = new HoleHintLayer(this.tex);
 
-    // world-space layers, back to front: zone weather under bodies, gameplay
-    // hardware over bodies, Milo & FX on top, preview read-out above all
+    // world-space layers, back to front: zone weather under the last-shot
+    // trail, both under bodies, gameplay hardware over bodies, Milo & FX on
+    // top, preview read-out above all
     this.worldRoot.addChild(
       this.zones.container,
+      this.lastShot.container,
       this.bodies.container,
       this.objects.container,
       this.milo.container,
@@ -84,6 +92,8 @@ class OrbitalRendererImpl implements OrbitalRenderer {
 
     this.app.stage.addChild(this.bg.container, this.worldRoot, this.vignette);
     this.vignette.texture = this.tex.vignette();
+    // screen-space edge hint sits above everything (stage child, no events)
+    this.app.stage.addChild(this.holeHint.container);
 
     // We own the render tick: syncWorld() updates then renders exactly once,
     // so transforms never lag a frame behind sim state.
@@ -131,6 +141,8 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.milo.update(w, dt, this.cam.scale);
     this.vfx.update(dt);
     this.preview.update(dt, w.ball.x, w.ball.y, this.cam.scale);
+    this.lastShot.update(this.cam.scale);
+    this.holeHint.update(dt, this.cam, w.holeX, w.holeY, w.ball.x, w.ball.y);
 
     // --- draw
     this.cam.applyToRoot(this.worldRoot);
@@ -212,6 +224,10 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.preview.setPreview(preview, end);
   }
 
+  setLastShot(points: { x: number; y: number }[] | null): void {
+    this.lastShot.setLastShot(points);
+  }
+
   setAim(active: boolean, dirX: number, dirY: number, power01: number): void {
     this.aimActive = active;
     this.preview.setAim(active, dirX, dirY, power01);
@@ -245,6 +261,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.bg.setQuality(tier);
     this.bodies.setQuality(tier); // drift budgets re-apply on next level build
     this.vfx.setQuality(tier);
+    this.lastShot.setQuality(tier);
     // re-apply the tier's DPR cap immediately (resize() re-checks it too)
     if (this.mounted) this.resize();
   }
@@ -302,6 +319,8 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.preview.setPreview(null, null);
     this.preview.setAim(false, 1, 0, 0);
     this.objects.setPinGhost(null);
+    this.lastShot.setLastShot(null); // a new level has no "previous stroke"
+    this.holeHint.reset();
     this.aimActive = false;
   }
 }

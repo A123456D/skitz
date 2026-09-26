@@ -94,6 +94,9 @@ class Game {
   private sinkSlowT = 0;
   /** Consecutive non-sunk strokes on the current level (adaptive hints). */
   private dryStrokes = 0;
+  /** Recorded flight path of the current/previous stroke (shot review). */
+  private lastShot: { x: number; y: number }[] = [];
+  private shotTick = 0;
 
   constructor(private host: HTMLElement, private uiRoot: HTMLElement) {
     const q = qa();
@@ -235,6 +238,8 @@ class Game {
     this.ui.show('playing');
     this.ui.bindWorld(this.world);
     this.ui.toast(`${def.name} — PAR ${def.par}`, 'neutral');
+    this.renderer.setLastShot(null);
+    this.lastShot.length = 0;
     this.input.enabled = true;
     if (qa().get('pred') === '0' || !this.save.settings.prediction) this.previewEnabled = false;
   }
@@ -304,7 +309,7 @@ class Game {
     this.renderer.setAim(true, dx, dy, p);
     const speed = MAX_LAUNCH_SPEED * p;
     if (this.previewEnabled && speed > 30) {
-      const res = predict(this.world, dx * speed, dy * speed, 2.2);
+      const res = predict(this.world, dx * speed, dy * speed, 3.2);
       this.renderer.setPreview(res.points, res.end);
     }
   }
@@ -317,6 +322,8 @@ class Game {
     this.renderer.setAim(false, 0, 0, 0);
     this.renderer.setPreview(null, null);
     this.renderer.setPinGhost(null);
+    this.lastShot.length = 0;
+    this.shotTick = 0;
     this.phase = 'flight';
   }
 
@@ -366,6 +373,13 @@ class Game {
         events = events.concat(drainEvents(w));
       }
       if (events.length) this.routeEvents(events, w);
+      // record the live flight path for the shot-review trail
+      if (w.ball.flying) {
+        this.shotTick++;
+        if (this.shotTick % 4 === 0 && this.lastShot.length < 400) {
+          this.lastShot.push({ x: w.ball.x, y: w.ball.y });
+        }
+      }
       this.story.update(w, events);
       this.checkSecrets(w);
       this.updateIntensity(w);
@@ -475,6 +489,8 @@ class Game {
     this.phase = 'strokeEndWait';
     this.waitT = 0.45;
     this.dryStrokes++;
+    // leave the shot's path on the course for the next aim phase
+    this.renderer.setLastShot(this.lastShot.length > 4 ? this.lastShot.slice() : null);
     // adaptive help: struggling on a hole? the caddie whispers
     if ((this.dryStrokes === 3 || this.dryStrokes === 6) && w.def.hint) {
       this.ui.toast(`HINT — ${w.def.hint}`, 'neutral');

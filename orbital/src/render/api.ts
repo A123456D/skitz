@@ -23,6 +23,10 @@ export interface OrbitalRenderer {
   /** Trajectory preview points (null hides). `end` = prediction terminator. */
   setPreview(preview: PredPoint[] | null, end: string | null): void;
 
+  /** The previous stroke's recorded flight path (null clears). Drawn faintly
+   *  during the next aim phase so players can study their last shot. */
+  setLastShot(points: { x: number; y: number }[] | null): void;
+
   /** Aim arrow while dragging (power01 0..1). */
   setAim(active: boolean, dirX: number, dirY: number, power01: number): void;
 

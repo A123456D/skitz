@@ -820,6 +820,37 @@
   100% { opacity: 0; transform: translateY(-6px); }
 }
 
+/* -------------------------------------------------------------- LEVEL PILL
+   Fresh-level announce. One CSS animation drives the whole envelope:
+   500ms fade+rise in, ~2.2s hold, fade out (transform+opacity only). */
+.ob-levelpill {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 50%;
+  max-width: min(70vw, 480px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 9px 20px;
+  background: var(--panel);
+  border: 1px solid var(--ob-line-soft);
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-indent: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+}
+.ob-levelpill.is-in { animation: ob-levelpill 3.1s var(--ob-ease) forwards; }
+@keyframes ob-levelpill {
+  0%    { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  16.1% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* 0.5s in */
+  87.1% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* +2.2s hold */
+  100%  { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+
 /* --------------------------------------------------------------- TUTORIAL
    First-run gesture cards. The dim layer itself never captures the pointer —
    drags pass through to the canvas so aiming keeps working during the tips;
@@ -920,6 +951,7 @@
   .ob-frags { padding: 7px 10px; }
   .ob-objectives { max-width: 230px; padding: 8px 12px; gap: 4px; }
   .ob-pausebtn { width: 44px; height: 44px; }
+  .ob-levelpill { max-width: 52vw; font-size: 9px; padding: 7px 16px; }
   .ob-subtitle {
     max-width: min(520px, 78vw);
     bottom: calc(20px + env(safe-area-inset-bottom));
@@ -931,7 +963,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ob-stars i, .ob-ring--b, .ob-toast { animation: none; }
+  .ob-stars i, .ob-ring--b, .ob-toast, .ob-levelpill { animation: none; }
   .ob-root * { transition-duration: 0.01ms !important; }
 }
 
