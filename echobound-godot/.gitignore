@@ -2,3 +2,4 @@ tools/*.zip
 tools/*.exe
 .godot/
 *.tmp
+art/shot.png

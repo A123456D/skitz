@@ -145,6 +145,13 @@ export function genWorld() {
     do { x = rng.range(-h, h); y = rng.range(-h, h); } while (Math.hypot(x, y) < 300 && tries++ < 20);
     G.arcs.push({ x, y, st: 'idle', t: rng.range(2, 6) });
   }
+  // --- street lamps: warm light pools = night-city atmosphere ---
+  G.lamps = [];
+  for (let i = 0; i < 9; i++) {
+    let x, y, tries = 0, ok = true;
+    do { x = rng.range(-h, h); y = rng.range(-h, h); ok = Math.hypot(x, y) > 260; if (ok) for (const l of G.lamps) if (Math.hypot(l.x - x, l.y - y) < 420) ok = false; } while (!ok && tries++ < 24);
+    if (ok) G.lamps.push({ x, y, rs: rng.f() });
+  }
   G.barrelRespawnT = 20;
 }
 
@@ -247,6 +254,12 @@ export function tryGenerator(b) {
 }
 
 export function drawWorld(R) {
+  // streetlamp light pools (warm pools kill the flat-navy look)
+  for (const l of G.lamps) {
+    const flick = 0.82 + Math.sin(G.time * 9 + l.rs * 40) * 0.06 + Math.sin(G.time * 23 + l.rs * 17) * 0.05 * (Math.sin(G.time * 1.3 + l.rs * 9) > 0.92 ? 1 : 0.2);
+    R.q('soft', l.x, l.y - 2, { sx: 4.2, sy: 3.2, tint: '#ffb46a', alpha: 0.13 * flick, layer: L.DECAL });
+    R.q('soft', l.x, l.y - 2, { sx: 2.1, sy: 1.6, tint: '#ffd8a0', alpha: 0.12 * flick, layer: L.DECAL });
+  }
   // ground variety decals sit directly on the tile layer
   for (const d of G.gdecals) {
     if (d.spr === 'concrete') R.q('concrete', d.x, d.y, { rot: d.rot, alpha: 0.85, layer: L.DECAL });
@@ -307,5 +320,12 @@ export function drawWorld(R) {
     const warn = a.st === 'warn';
     R.q(warn && Math.floor(G.time * 16) % 2 === 0 ? 'arc1' : 'arc0', a.x, a.y, { ay: 0.95, layer: L.ENT });
     if (warn) R.q('glow', a.x, a.y - 22, { sx: 0.8, sy: 0.8, tint: '#ffe98a', alpha: 0.3, layer: L.GLOW });
+  }
+  // street lamps (tall, over props; head glow additive)
+  for (const l of G.lamps) {
+    const flick = Math.sin(G.time * 1.3 + l.rs * 9) > 0.92 ? Math.floor(G.time * 14 + l.rs * 5) % 2 : 0;
+    R.q('shadow', l.x, l.y + 4, { sx: 0.5, sy: 0.35, alpha: 0.22, layer: L.SHADOW });
+    R.q(flick ? 'lamp1' : 'lamp0', l.x, l.y, { ay: 0.95, layer: L.ENT });
+    if (!flick) R.q('glow', l.x, l.y - 32, { sx: 0.9, sy: 0.9, tint: '#ffd75e', alpha: 0.3, layer: L.GLOW });
   }
 }

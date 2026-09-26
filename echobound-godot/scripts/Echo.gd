@@ -20,7 +20,7 @@ func setup(game_ref, frames_: Array, weapon_: String, mul: float) -> void:
 	frames = frames_
 	weapon = weapon_
 	dmg_mul = mul
-	body = SpriteLib.sprite("ghost", 0.94)
+	body = SpriteLib.sprite("ghost0", 0.94)
 	body.modulate = Color(0.5, 0.9, 1.0, 0.62)
 	add_child(body)
 	gun = SpriteLib.sprite("wp_" + weapon, 0.5)
@@ -44,6 +44,9 @@ func _physics_process(dt: float) -> void:
 	gun.rotation = aim
 	gun.position = Vector2(cos(aim) * 15.0, sin(aim) * 5.0 - 5.0)
 	gun.scale.y = -1.0 if cos(aim) < 0.0 else 1.0
+	# ghost walk animation
+	var moving := Vector2(f1["x"], f1["y"]).distance_to(Vector2(f0["x"], f0["y"])) > 0.3
+	body.texture = SpriteLib.tex("ghost%d" % ((2 + int(t / 4.0) % 4) if moving else (int(t / 20.0) % 2)))
 	# replayed attacks go through the shared weapon system
 	var def: Dictionary = Weapons.DB.get(weapon, {})
 	if def.is_empty():

@@ -24,7 +24,7 @@ export function fastN() { return Math.max(1, Math.min(6, parseInt(G.Q.get('fast'
 export function resetRun(opts = {}) {
   G.time = 0; G.hitstop = 0;
   G.cam.x = 0; G.cam.y = 0; G.cam.trauma = 0;
-  G.cam.zoom = Math.max(0.72, Math.min(1.45, Math.min(innerWidth / 1280, innerHeight / 720)));
+  G.cam.zoom = Math.max(1.05, Math.min(1.8, Math.min(innerWidth / 1000, innerHeight / 620)));
   G.env.half = 1500;
   G.flags = { dead: false, won: false };
   G.seed = opts.seed ?? ((Math.random() * 0xffffffff) >>> 0);

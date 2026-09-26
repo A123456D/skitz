@@ -9,17 +9,17 @@ import { addXp } from './player.js';
 import { SpatialHash, TAU, rand, irand, angTo, clamp } from '../core/util.js';
 
 export const ENEMY_DEF = {
-  husk:     { hp: 20, spd: 95,  dmg: 8, r: 12, xp: 1, cost: 1, spr: 'husk' },
-  lancer:   { hp: 26, spd: 80,  dmg: 7, r: 11, xp: 2, cost: 2, spr: 'lancer' },
-  mourner:  { hp: 60, spd: 45,  dmg: 6, r: 14, xp: 5, cost: 4, spr: 'mourner' },
-  thief:    { hp: 30, spd: 155, dmg: 4, r: 10, xp: 3, cost: 2, spr: 'thief' },
-  leech:    { hp: 24, spd: 110, dmg: 5, r: 10, xp: 2, cost: 3, spr: 'leech' },
-  mirror:   { hp: 44, spd: 70,  dmg: 6, r: 11, xp: 4, cost: 4, spr: 'mirror' },
-  timeeater:{ hp: 90, spd: 85,  dmg: 8, r: 15, xp: 8, cost: 6, spr: 'timeeater' },
-  parasite: { hp: 36, spd: 125, dmg: 6, r: 11, xp: 4, cost: 4, spr: 'parasite' },
-  witness:  { hp: 70, spd: 55,  dmg: 0, r: 12, xp: 6, cost: 5, spr: 'witness' },
-  counter:  { hp: 80, spd: 70,  dmg: 10, r: 12, xp: 6, cost: 5, spr: 'witness' },
-  clockadd: { hp: 14, spd: 175, dmg: 6, r: 9,  xp: 1, cost: 1, spr: 'clockadd' },
+  husk:     { hp: 20, spd: 95,  dmg: 8, r: 13, xp: 1, cost: 1, spr: 'husk', fr: 4 },
+  lancer:   { hp: 26, spd: 82,  dmg: 7, r: 12, xp: 2, cost: 2, spr: 'lancer', fr: 4 },
+  mourner:  { hp: 60, spd: 46,  dmg: 6, r: 15, xp: 5, cost: 4, spr: 'mourner', fr: 4 },
+  thief:    { hp: 30, spd: 155, dmg: 4, r: 11, xp: 3, cost: 2, spr: 'thief', fr: 4 },
+  leech:    { hp: 24, spd: 110, dmg: 5, r: 10, xp: 2, cost: 3, spr: 'leech', fr: 4 },
+  mirror:   { hp: 44, spd: 70,  dmg: 6, r: 11, xp: 4, cost: 4, spr: 'mirror', fr: 2 },
+  timeeater:{ hp: 90, spd: 85,  dmg: 8, r: 15, xp: 8, cost: 6, spr: 'timeeater', fr: 4 },
+  parasite: { hp: 36, spd: 125, dmg: 6, r: 11, xp: 4, cost: 4, spr: 'parasite', fr: 4 },
+  witness:  { hp: 70, spd: 55,  dmg: 0, r: 12, xp: 6, cost: 5, spr: 'witness', fr: 3 },
+  counter:  { hp: 80, spd: 70,  dmg: 10, r: 12, xp: 6, cost: 5, spr: 'witness', fr: 3 },
+  clockadd: { hp: 14, spd: 175, dmg: 6, r: 9,  xp: 1, cost: 1, spr: 'clockadd', fr: 1 },
 };
 
 const ELITES = ['teleport', 'explosive', 'reflective', 'regen', 'split', 'phase', 'echothief'];
@@ -472,9 +472,10 @@ export function drawEnemies(R) {
     R.q('shadow', e.x, y + e.r * 0.85, { sx: e.r * 2 / 40, sy: e.r / 30, alpha: 0.24 * spawnA, layer: 6 });
     let tint = e.buffed ? '#d8b8ff' : '#ffffff';
     if (e.flash > 0) tint = '#ffc8b8';
-    // animation language: leg frames for walkers, squash-bob for floaters, hit punch on damage
+    // animation: per-species frame count from ENEMY_DEF, cycle driven by sim time
     let sprName = e.spr;
-    if (e.type === 'husk' || e.type === 'lancer' || e.type === 'thief') sprName += Math.floor(e.t * 7 + e.id) % 2;
+    const fr = (ENEMY_DEF[e.type] && ENEMY_DEF[e.type].fr) || 1;
+    if (fr > 1) sprName += Math.floor(e.t * 8 + e.id) % fr;
     const sq = 1 + Math.sin(e.t * 9 + e.id) * 0.05;
     const px = e.hitT > 0 ? 1 + e.hitT * 1.1 : 1;
     const py = e.hitT > 0 ? 1 - e.hitT * 1.6 : sq;

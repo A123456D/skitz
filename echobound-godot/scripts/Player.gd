@@ -72,10 +72,13 @@ func _physics_process(dt: float) -> void:
 	# aim
 	var aim: float = (game.get_global_mouse_position() - position).angle()
 	rotation = 0.0
-	# body + walk animation
+	# body + walk animation (frames 0-1 idle breathe, 2-5 walk cycle)
 	var moving := mv.length() > 0.1
-	walk_t += dt * (11.0 if moving else 2.5)
-	body.texture = SpriteLib.tex("warden0") if not moving else SpriteLib.tex("warden%d" % (1 + int(walk_t) % 3))
+	walk_t += dt * (11.0 if moving else 2.0)
+	if moving:
+		body.texture = SpriteLib.tex("warden%d" % (2 + int(walk_t) % 4))
+	else:
+		body.texture = SpriteLib.tex("warden%d" % (int(walk_t) % 2))
 	body.scale.x = -1.0 if cos(aim) < 0.0 else 1.0
 	# held weapon rotates toward aim
 	gun.position = position + Vector2(cos(aim) * 15.0, sin(aim) * 5.0 - 5.0)

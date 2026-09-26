@@ -225,7 +225,13 @@ export function drawEchoes(R) {
     const gx = Math.sin(e.glitch * 40) > 0.9 ? rand(-3, 3) : 0;
     const gy = Math.sin(e.glitch * 33) > 0.94 ? rand(-2, 2) : 0;
     const A0 = baseA * (e.suppressed ? 0.35 : 1) * (e.dead ? Math.max(0, (e.fade ?? 0) / 0.3) : 1);
-    R.q('ghost', e.x + gx, e.y + gy, { tint, alpha: A0, ay: 0.92, sx: sx * (Math.sin(e.glitch * 40) > 0.9 ? 1.08 : 1), sy, layer: 7 });
+    R.q('ghost' + (e.moving ? 2 + (Math.floor(G.time * 12) % 4) : (Math.floor(G.time * 2) % 2)), e.x + gx, e.y + gy, { tint, alpha: A0, ay: 0.92, sx: sx * (Math.sin(e.glitch * 40) > 0.9 ? 1.08 : 1), sy, layer: 7 });
+    // echo weapon rotates to its recorded aim
+    if (!e.dead) {
+      const wpn = e.weapon === 'widow' ? 'wp_widow' : e.weapon === 'sun' ? 'wp_sun' : 'wp_grave';
+      const ef = Math.cos(e.aim) < 0 ? -1 : 1;
+      R.q(wpn, e.x + Math.cos(e.aim) * 15, e.y - 5 + Math.sin(e.aim) * 5, { rot: e.aim, sy: ef, alpha: A0, layer: 7, tint: e.hostile ? '#ff9090' : '#9fe8ff' });
+    }
     // hologram scanline sweeping the silhouette
     if (!e.dead) {
       const scan = ((G.time * 46 + e.glitch * 60) % 30) - 8;

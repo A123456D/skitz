@@ -23,6 +23,11 @@ export const FX = {
   ring(x, y, r, col = '#54e6ff', life = 0.35) { parts.push({ ring: 1, x, y, r0: r * 0.2, r1: r, t: life, T: life, col, add: true }); },
   puff(x, y, n, col = '#3a4254') { this.burst(x, y, n, { col, spd: 60, life: 0.9, size: 3.2, add: false, drag: 1.5 }); },
   trailDot(x, y, col, size = 2, life = 0.3) { if (parts.length >= MAXP) parts.shift(); parts.push({ x, y, vx: 0, vy: 0, t: life, T: life, col, size, drag: 0, add: true }); },
+  // ambient drifting motes: the city air is never empty
+  dust(x, y) {
+    if (parts.length >= MAXP) return;
+    parts.push({ x, y, vx: rand(-9, 9), vy: rand(-20, -6), t: rand(1.6, 3), T: 3, col: Math.random() < 0.85 ? '#7d95b5' : '#d8a86b', size: rand(0.8, 1.5), drag: 0, add: true });
+  },
   // one-frame sprite flash (muzzle etc)
   flashSpr(x, y, spr, rot = 0, size = 1, col = '#ffffff', life = 0.07) {
     if (parts.length >= MAXP) parts.shift();

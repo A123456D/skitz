@@ -17,7 +17,7 @@ import { updateDirector, setBanner as dirBanner } from './game/director.js';
 import { genWorld, updateWorld, drawWorld } from './game/world.js';
 import { offerChoices, offerRelics, applyUpgrade, ownedLabel, setBanner as upBanner } from './game/upgrades.js';
 import { HUD } from './ui/hud.js';
-import { fmtTime, clamp, TAU, lerp } from './core/util.js';
+import { fmtTime, clamp, TAU, lerp, rand } from './core/util.js';
 
 const canvas = document.getElementById('game');
 let R;
@@ -36,7 +36,7 @@ R.setVignette(makeVignetteCanvas());
 R.resize();
 addEventListener('resize', () => {
   R.resize();
-  if (G.screen === 'run') G.cam.zoom = clamp(Math.min(innerWidth / 1280, innerHeight / 720), 0.72, 1.45);
+  if (G.screen === 'run') G.cam.zoom = Math.max(1.05, Math.min(1.8, Math.min(innerWidth / 1000, innerHeight / 620)));
 });
 
 I.init(canvas);
@@ -102,6 +102,11 @@ function tick() {
   updateWorld(STEP);
   updateOrbit(STEP);
   FX.update(STEP);
+  // ambient motes drift through the fight
+  if (Math.random() < 0.3) {
+    const r2 = G.viewR || 700;
+    FX.dust(G.cam.x + rand(-r2 * 0.7, r2 * 0.7), G.cam.y + rand(-r2 * 0.45, r2 * 0.45));
+  }
   // camera
   const P = G.player;
   const k = 1 - Math.pow(0.0015, STEP);
@@ -152,6 +157,7 @@ function render(dtR) {
     FX.draw(R);
     const P = G.player;
     R.vignette(0.62);
+    R.flash(0.05, '#3a2c12'); // subtle warm grade over the night city
     if (P && P.alive && P.hp < P.maxHp * 0.25) R.flash(0.06 + Math.sin(G.time * 5) * 0.04, '#ff1a3a');
     FX.drawFlash(R);
     G.beams.length = 0;
