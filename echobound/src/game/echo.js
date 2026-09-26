@@ -1,0 +1,210 @@
+// THE ECHO SYSTEM: record the last N seconds, replay them as fighting ghosts.
+import { G, ECHO_PERIOD } from './state.js';
+import { fireOnce, beamTick } from './weapons.js';
+import { hurt } from './enemies.js';
+import { FX } from './fx.js';
+import { A } from '../core/audio.js';
+import { META } from './meta.js';
+import { lerp, rand, angTo } from '../core/util.js';
+
+export function echoSlots() { return 3 + (G.owned.overflow ? 1 : 0) + (G.owned.chrono ? 1 : 0); }
+export function echoPeriod() { return G.owned.twinEcho ? 420 : G.owned.chrono ? 480 : ECHO_PERIOD; }
+export function echoDur() { return G.owned.chrono ? 720 : echoPeriod(); }
+
+export function tickRecorder() {
+  const P = G.player;
+  G.rec.frames.push({ x: P.x, y: P.y, aim: P.aim, f: P.firedThisTick, b: P.beamOn ? 1 : 0 });
+  while (G.rec.frames.length > echoPeriod()) G.rec.frames.shift();
+  P.firedThisTick = 0; P.beamOn = false;
+  // cadence: every period ticks, the last recording comes back as an Echo
+  G.rec.n = (G.rec.n || 0) + 1;
+  if (G.rec.n >= echoPeriod()) {
+    G.rec.n = 0;
+    spawnEcho();
+  }
+}
+
+function echoMods() {
+  return {
+    dmgMul: 0.6 * (1 + (G.owned.predMemory || 0) * 0.18) * (1 + (G.owned.overflow ? 0.1 : 0)) * (1 + (G.owned.theMirror ? 0.25 : 0)) * (1 + synVelocityBonus()),
+    speedMul: (G.syn.velocity ? 1.3 : 1) * (G.owned.chrono ? echoPeriod() / echoDur() : 1),
+    reversed: !!G.owned.rewind,
+    permanent: !!G.owned.redbutton,
+    trailFire: !!G.syn.afterburn || G.ascension === 'thunder',
+    trailShock: G.ascension === 'thunder',
+    rhythm: !!G.owned.brokenRhythm,
+    returnShot: !!G.owned.mirrorShot,
+  };
+}
+function synVelocityBonus() { return G.syn.velocity ? Math.min(0.3, (G.player.speed - 240) / 240 * 0.3 + 0.1) : 0; }
+
+let bannerRef = null;
+export function setBanner(fn) { bannerRef = fn; }
+
+export function spawnEcho(framesOverride) {
+  if (G.flags.dead || G.flags.won) return;
+  const frames = framesOverride || G.rec.frames.slice();
+  if (frames.length < 30) return;
+  // slot cap: recycle oldest non-hostile
+  const mine = G.echoes.filter((e) => !e.hostile && !e.dead);
+  if (mine.length >= echoSlots()) {
+    const old = mine[0];
+    old.dead = true; old.fade = 0.25;
+    FX.burst(old.x, old.y, 8, { col: '#54e6ff', spd: 80, life: 0.4, size: 2 });
+  }
+  G.echoes.push({
+    frames, t: 0, dur: frames.length, weapon: G.player.weapon,
+    mods: echoMods(), rhythm: { count: 0 }, trailT: 0, paraT: 0,
+    hostile: false, hp: 0, dead: false, glitch: rand(0, 1), age: 0,
+  });
+  G.stats.echoes++;
+  A.sfx('echo');
+  FX.ring(G.player.x, G.player.y, 90, '#54e6ff');
+  FX.burst(G.player.x, G.player.y, 14, { col: '#54e6ff', spd: 140, life: 0.5, size: 2 });
+  if (G.stats.echoes === 1) { META.event('echo_first'); bannerRef && bannerRef('YOUR PAST JOINS THE FIGHT', 'IT REPEATS YOUR LAST 10 SECONDS'); }
+  if (G.stats.echoes === 10) { META.event('echo_ten'); }
+}
+
+export function convertHostile(e, buff = 1) {
+  if (e.hostile || e.dead) return;
+  e.hostile = true; e.hp = 260 * buff; e.maxHp = e.hp; e.fade = 0;
+  FX.flash(0.15, '#ff5a5a');
+  FX.ring(e.x, e.y, 60, '#ff5a5a');
+  A.sfx('adapt');
+}
+
+function shooterFor(e, frame) {
+  return {
+    x: e.x, y: e.y,
+    aim: e.hostile ? angTo(e.x, e.y, G.player.x, G.player.y) : frame.aim,
+    weapon: e.weapon, mul: e.mods.dmgMul, src: e.hostile ? 'ehost' : 'echo', echo: e, echoRhythm: e.mods.rhythm ? e.rhythm : null, shotN: e.rhythm.count,
+  };
+}
+
+function inSuppress(x, y) {
+  for (const m of G.enemies) {
+    if (m.type !== 'mourner' || m.dead) continue;
+    if ((m.x - x) ** 2 + (m.y - y) ** 2 < 150 * 150) return true;
+  }
+  return false;
+}
+function zoneSlowAt(x, y) {
+  for (const z of G.zones) {
+    if (z.active && Math.abs(x - z.x) < z.w / 2 && Math.abs(y - z.y) < z.h / 2) return 0.35;
+  }
+  return 1;
+}
+
+export function updateEchoes(dt) {
+  for (let i = G.echoes.length - 1; i >= 0; i--) {
+    const e = G.echoes[i];
+    if (e.dead) {
+      e.fade = (e.fade ?? 0.3) - dt;
+      if (e.fade <= 0) G.echoes.splice(i, 1);
+      continue;
+    }
+    e.age += dt;
+    const sup = !e.hostile && inSuppress(e.x, e.y);
+    const zs = zoneSlowAt(e.x, e.y);
+    e.suppressed = sup;
+    if (!sup) e.t += dt * 60 * e.mods.speedMul * zs;
+    const fr = e.frames;
+    const idx = e.mods.reversed ? fr.length - 1 - e.t : e.t;
+    const i0 = Math.max(0, Math.min(fr.length - 1, Math.floor(idx)));
+    const i1 = Math.min(fr.length - 1, i0 + 1);
+    const tt = Math.min(1, idx - i0);
+    const f0 = fr[i0], f1 = fr[i1];
+    e.x = lerp(f0.x, f1.x, tt); e.y = lerp(f0.y, f1.y, tt); e.aim = f0.aim;
+    e.moving = Math.hypot(f1.x - f0.x, f1.y - f0.y) > 0.4;
+    if (!e.spawnFx && e.age > 0.02) { e.spawnFx = 1; }
+    // trail pools
+    if ((e.mods.trailFire || e.mods.trailShock) && e.moving) {
+      e.trailT -= dt;
+      if (e.trailT <= 0) {
+        e.trailT = 0.5;
+        if (e.mods.trailFire) G.wells.push({ x: e.x, y: e.y, t: 2.5, dur: 2.5, r: 26, pull: 0, dps: 14, fire: true, src: 'echo' });
+        else G.wells.push({ x: e.x, y: e.y, t: 1.6, dur: 1.6, r: 30, pull: 0, dps: 22, shock: true, src: 'echo' });
+      }
+    }
+    // attacks
+    if (!sup && !e.dead) {
+      if (f0.f > 0) {
+        for (let k = 0; k < f0.f; k++) {
+          e.rhythm.count++;
+          const sh = shooterFor(e, f0);
+          const saveMul = e.mods.dmgMul;
+          fireOnce({ ...sh, shotN: e.rhythm.count });
+          // mirror shot: last bullet spawned gains return behavior
+          if (e.mods.returnShot && G.bullets.length) {
+            const b = G.bullets[G.bullets.length - 1];
+            if (b.echo === e) b.returnT = 0.4;
+          }
+          if (e.hostile) break; // hostiles fire slower (once per tick max)
+        }
+      }
+      if (f0.b) beamTick(shooterFor(e, f0), dt);
+    }
+    // hostile echoes are killable
+    if (e.hostile) {
+      if (e.hp <= 0) {
+        e.dead = true; e.fade = 0.3;
+        FX.burst(e.x, e.y, 18, { col: '#ff5a5a', spd: 200, life: 0.5 });
+        FX.shake(0.25); A.sfx('pop');
+      }
+    }
+    // expiry
+    if (e.t >= e.dur) {
+      e.dead = true; e.fade = 0.3;
+      if (G.owned.secondDeath) {
+        explodeEcho(e);
+      } else {
+        FX.burst(e.x, e.y, 10, { col: e.hostile ? '#ff5a5a' : '#54e6ff', spd: 90, life: 0.4, size: 2 });
+      }
+    }
+  }
+  // paradox: overlapping echoes merge
+  if (G.owned.paradox) {
+    const live = G.echoes.filter((e) => !e.dead && !e.hostile);
+    for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) {
+      const ea = live[a], eb = live[b];
+      if (ea.dead || eb.dead) continue;
+      if ((ea.x - eb.x) ** 2 + (ea.y - eb.y) ** 2 < 30 * 30) {
+        ea.paraT = (ea.paraT || 0) + 1 / 60; eb.paraT = ea.paraT;
+        if (ea.paraT > 0.8) {
+          ea.paraT = 0;
+          eb.dead = true; eb.fade = 0.2;
+          ea.mods = { ...ea.mods, dmgMul: ea.mods.dmgMul + eb.mods.dmgMul * 0.9, speedMul: Math.max(ea.mods.speedMul, eb.mods.speedMul) * 1.15 };
+          ea.t = Math.min(ea.t, eb.t); ea.dur = Math.max(ea.dur, eb.dur);
+          FX.flash(0.2, '#ff5ad2'); FX.ring(ea.x, ea.y, 90, '#ff5ad2');
+          FX.burst(ea.x, ea.y, 24, { col: '#ff5ad2', spd: 220, life: 0.6 });
+          A.sfx('ascend');
+          FX.shake(0.3);
+        }
+      }
+    }
+  }
+}
+function explodeEcho(e) {
+  const out = [];
+  G.eh.query(e.x, e.y, 130, out);
+  for (const t of out) if (!t.dead && Math.hypot(t.x - e.x, t.y - e.y) < 130 + t.r) hurt(t, 60 * e.mods.dmgMul * 2, { src: 'echo', kb: 200 });
+  FX.ring(e.x, e.y, 130, '#54e6ff');
+  FX.burst(e.x, e.y, 26, { col: '#54e6ff', spd: 300, life: 0.6 });
+  FX.shake(0.4); A.sfx('boom');
+}
+
+export function drawEchoes(R) {
+  for (const e of G.echoes) {
+    if (e.dead && (e.fade ?? 0) <= 0) continue;
+    const alpha = e.hostile ? 0.7 : 0.55;
+    const tint = e.hostile ? '#ff7070' : '#7de6ff';
+    e.glitch += 0.016;
+    const gx = Math.sin(e.glitch * 40) > 0.92 ? rand(-3, 3) : 0;
+    // motion trail
+    if (e.moving && Math.random() < 0.4) FX.trailDot(e.x, e.y + 4, e.hostile ? '#ff5a5a' : '#54e6ff', 2.4, 0.25);
+    R.q('shadow', e.x, e.y + 10, { sx: 0.7, sy: 0.7, alpha: 0.3 * alpha, layer: 6 });
+    R.q('ghost', e.x + gx, e.y, { tint, alpha: alpha * (e.suppressed ? 0.35 : 1) * (e.dead ? Math.max(0, e.fade / 0.3) : 1), ay: 0.92, layer: 7 });
+    R.q('glow', e.x, e.y - 10, { sx: 1.1, sy: 1.1, tint: e.hostile ? '#ff5a5a' : '#54e6ff', alpha: 0.16 * alpha, layer: 9 });
+    if (e.suppressed) R.text('X', e.x, e.y - 44, { s: 2, col: '#9aa3b5', alpha: 0.8, align: 'center', layer: 10 });
+  }
+}
