@@ -1,0 +1,4 @@
+tools/*.zip
+tools/*.exe
+.godot/
+*.tmp
