@@ -212,7 +212,7 @@ export class Renderer3D implements OrbitalRenderer {
   private beam: THREE.Mesh | null = null;
   private beamViews: { pivot: THREE.Object3D; spin: number }[] = [];
   private fragmentViews: { mesh: THREE.Mesh; x: number; y: number; taken: boolean; phase: number }[] = [];
-  private switchViews: { ring: THREE.Mesh; x: number; y: number }[] = [];
+  private switchViews: { ring: THREE.Mesh; x: number; y: number; id: string; targets: { x: number; y: number }[] }[] = [];
   private wormViews: { a: THREE.Object3D; b: THREE.Object3D }[] = [];
   private debrisViews: THREE.Mesh[] = [];
   private pinViews: THREE.Group[] = [];
@@ -256,6 +256,26 @@ export class Renderer3D implements OrbitalRenderer {
   private distScale = 1;
   private shake = 0;
   private t = 0;
+  // user orbit offsets (the 3D verb): yaw/pitch around the look target plus a
+  // zoom multiplier; they persist while aiming and ease home on launch
+  private orbitYaw = 0;
+  private orbitPitch = 0;
+  private orbitZoom = 1;
+  private orbiting = false;
+  private activePtrs = new Map<number, { x: number; y: number }>();
+  private orbitIds = new Set<number>();
+  private orbitPinch = 0;
+  private orbitHome = false;
+  private wasFlying = false;
+  private sinkPush = 0;
+  // juice: squash timer, fps guard, preview end marker
+  private bounceSquash = 0;
+  private fpsEma = 60;
+  private fpsLowT = 0;
+  private endMarker: THREE.Mesh;
+  private endMarkerMat: THREE.MeshBasicMaterial;
+  private puffs: { sp: THREE.Sprite; vx: number; vy: number; vz: number; t: number; life: number }[] = [];
+  private pulseDots: { sp: THREE.Sprite; x0: number; y0: number; x1: number; y1: number; t: number; life: number }[] = [];
 
   // event ripples (pooled)
   private ripples: Ripple[] = [];
@@ -325,8 +345,77 @@ export class Renderer3D implements OrbitalRenderer {
     this.trail.frustumCulled = false;
     this.trail.visible = false;
 
+    // preview end marker: where the ghost flight ends and how
+    this.endMarkerMat = new THREE.MeshBasicMaterial({
+      color: CUP_RING, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+    });
+    this.endMarker = new THREE.Mesh(new THREE.RingGeometry(10, 15, 32), this.endMarkerMat);
+    this.endMarker.rotation.x = -Math.PI / 2;
+    this.endMarker.visible = false;
+
     this.scene.add(this.worldGroup, this.fxGroup, this.milo, this.holeGroup,
-      this.preview, this.aimGroup, this.ghost, this.lastShot, this.trail);
+      this.preview, this.aimGroup, this.ghost, this.lastShot, this.trail, this.endMarker);
+    this.bindOrbit();
+  }
+
+  /** The 3D verb: camera orbit + zoom. Right/middle mouse drag, a second
+   *  finger (drag + pinch), wheel, Q/E. Offsets persist while you aim and
+   *  ease home when the ball launches so flight stays cinematic. */
+  private bindOrbit(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyQ') this.orbitYaw += 0.16;
+      else if (e.code === 'KeyE') this.orbitYaw -= 0.16;
+    });
+    window.addEventListener('wheel', (e) => {
+      if (!this.host?.contains(e.target as Node)) return;
+      this.orbitZoom = clamp(this.orbitZoom * (e.deltaY > 0 ? 1.08 : 0.93), 0.62, 1.5);
+    }, { passive: true });
+    const el = (): HTMLElement => this.host ?? document.body;
+    el().addEventListener('pointerdown', (e) => {
+      this.activePtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const mouseOrbit = e.pointerType === 'mouse' && e.button !== 0;
+      const secondFinger = e.pointerType !== 'mouse' && !e.isPrimary;
+      if (mouseOrbit || secondFinger) {
+        this.orbitIds.add(e.pointerId);
+        this.orbiting = true;
+        this.syncPinch();
+      }
+    });
+    el().addEventListener('pointermove', (e) => {
+      const prev = this.activePtrs.get(e.pointerId);
+      if (!prev) return;
+      const dx = e.clientX - prev.x;
+      const dy = e.clientY - prev.y;
+      prev.x = e.clientX;
+      prev.y = e.clientY;
+      if (!this.orbitIds.has(e.pointerId)) return;
+      if (this.activePtrs.size >= 2) {
+        // pinch: spread of the two most recent pointers
+        const pts = [...this.activePtrs.values()];
+        const d = Math.hypot(pts[pts.length - 1].x - pts[pts.length - 2].x, pts[pts.length - 1].y - pts[pts.length - 2].y);
+        if (this.orbitPinch > 0 && d > 1) {
+          this.orbitZoom = clamp(this.orbitZoom * (this.orbitPinch / d), 0.62, 1.5);
+        }
+        this.orbitPinch = d;
+      } else {
+        this.orbitYaw -= dx * 0.005;
+        this.orbitPitch = clamp(this.orbitPitch + dy * 0.004, -0.32, 0.42);
+      }
+    });
+    const drop = (e: PointerEvent): void => {
+      this.activePtrs.delete(e.pointerId);
+      this.orbitIds.delete(e.pointerId);
+      this.orbiting = this.orbitIds.size > 0;
+      this.orbitPinch = 0;
+    };
+    el().addEventListener('pointerup', drop);
+    el().addEventListener('pointercancel', drop);
+  }
+
+  private syncPinch(): void {
+    const pts = [...this.activePtrs.values()];
+    this.orbitPinch = pts.length >= 2 ? Math.hypot(pts[pts.length - 1].x - pts[pts.length - 2].x, pts[pts.length - 1].y - pts[pts.length - 2].y) : 0;
   }
 
   // ------------------------------------------------------------- contract
@@ -361,6 +450,18 @@ export class Renderer3D implements OrbitalRenderer {
     this.t += dt;
     if (w !== this.lastWorld) this.rebuild(w);
 
+    // fps guard (mobile-first): sustained slowdown on the full tier drops to
+    // lite automatically — bloom off, lighter geometry, capped DPR
+    if (dt > 0) this.fpsEma = this.fpsEma + (1 / dt - this.fpsEma) * 0.05;
+    if (this.quality === 'full') {
+      if (this.fpsEma < 42) this.fpsLowT += dt;
+      else this.fpsLowT = Math.max(0, this.fpsLowT - dt * 2);
+      if (this.fpsLowT > 3) {
+        this.fpsLowT = 0;
+        this.setQuality('lite');
+      }
+    }
+
     this.updateDynamic(w, dt);
     this.updateCamera(w, dt);
     if (this.quality === 'full' && this.composer) this.composer.render();
@@ -386,6 +487,17 @@ export class Renderer3D implements OrbitalRenderer {
     pos.needsUpdate = true;
     colr.needsUpdate = true;
     this.preview.geometry.setDrawRange(0, n);
+    // end marker: where the ghost flight lands and how it ends
+    if (points && n > 0 && _end && _end !== 'timeout') {
+      const last = points[n - 1];
+      this.endMarker.position.set(last.x, 1.5, -last.y);
+      this.endMarkerMat.color.setHex(
+        _end === 'sunk' ? CUP_RING : _end === 'dead' ? DANGER : 0x9aa8b4,
+      );
+      this.endMarker.visible = true;
+    } else {
+      this.endMarker.visible = false;
+    }
   }
 
   setLastShot(points: { x: number; y: number }[] | null): void {
@@ -1082,7 +1194,7 @@ export class Renderer3D implements OrbitalRenderer {
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(d.x, 0.9, -d.y);
     this.worldGroup.add(ring);
-    this.switchViews.push({ ring, x: d.x, y: d.y });
+    this.switchViews.push({ ring, x: d.x, y: d.y, id: d.id, targets: [] });
 
     // conduit wires to target bodies/zones (targets are sim ids)
     const nodes = new Map<string, { x: number; y: number }>();
@@ -1093,6 +1205,7 @@ export class Renderer3D implements OrbitalRenderer {
     for (const tid of d.targets) {
       const t = nodes.get(tid);
       if (!t) continue;
+      this.switchViews[this.switchViews.length - 1].targets.push(t);
       const g = new THREE.BufferGeometry().setFromPoints([
         px(d.x, d.y, 2), px(t.x, t.y, 2),
       ]);
@@ -1161,9 +1274,17 @@ export class Renderer3D implements OrbitalRenderer {
     this.milo.position.z = expDamp(this.milo.position.z, tz, k, dt);
     const sunkNow = w.ball.sunk || w.ball.dead;
     if (this.miloMesh) {
-      const s = sunkNow ? Math.max(0.001, this.miloMesh.scale.x - dt * 4) : 1;
-      this.miloMesh.scale.setScalar(s);
-      this.milo.visible = s > 0.01;
+      // squash & stretch: elongate along velocity in flight, squash briefly
+      // on impact; the sink shrink still wins when Milo is gone
+      this.bounceSquash = expDamp(this.bounceSquash, 0, 7, dt);
+      const sp = Math.hypot(w.ball.vx, w.ball.vy);
+      const m = w.ball.flying ? clamp(sp / 900, 0, 1) : 0;
+      const shrink = sunkNow ? Math.max(0.001, this.miloMesh.scale.x - dt * 4) : 1;
+      const along = (1 + 0.42 * m - 0.3 * this.bounceSquash) * shrink;
+      const perp = (1 - 0.2 * m + 0.42 * this.bounceSquash) * shrink;
+      this.miloMesh.rotation.y = Math.atan2(w.ball.vx, -w.ball.vy);
+      this.miloMesh.scale.set(perp, 1 - 0.12 * m + 0.2 * this.bounceSquash, along);
+      this.milo.visible = shrink > 0.01;
     }
     // contact shadow: grounded when settled, a faint drop while airborne
     if (this.contactBlob) {
@@ -1246,13 +1367,17 @@ export class Renderer3D implements OrbitalRenderer {
       if (i >= this.pinViews.length) this.pinViews.push(this.makePinMesh());
       const pv = this.pinViews[i];
       const live = i < w.pins.length;
-      pv.visible = live;
       if (live) {
-        pv.position.set(w.pins[i].x, 0, -w.pins[i].y);
+        if (!pv.visible) pv.userData.spawn = this.t; // fresh pin: drop it in
+        const age = this.t - ((pv.userData.spawn as number | undefined) ?? this.t);
+        pv.position.set(w.pins[i].x, age < 0.45 ? (1 - age / 0.45) ** 2 * 46 : 0, -w.pins[i].y);
         pv.rotation.y += dt * 0.4;
       }
+      pv.visible = live;
     }
 
+    this.updatePuffs(dt);
+    this.updatePulseDots(dt);
     // field drift particles animate (in = attractor, out = repulsor)
     for (const dv of this.driftViews) {
       const bd = w.bodies[dv.bodyIdx];
@@ -1334,6 +1459,84 @@ export class Renderer3D implements OrbitalRenderer {
     r.mesh.visible = true;
   }
 
+  /** Dust/sparkle puffs — a tiny pooled particle burst. */
+  private spawnPuff(x: number, y: number, color: number, n: number, speed: number): void {
+    for (let i = 0; i < n; i++) {
+      let p = this.puffs.find((q) => q.t >= q.life);
+      if (!p) {
+        if (this.puffs.length >= 24) return;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: blobTexture('rgba(255,255,255,1)'), transparent: true, opacity: 0.8,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+        sp.scale.setScalar(10);
+        this.fxGroup.add(sp);
+        p = { sp, vx: 0, vy: 0, vz: 0, t: 0, life: 0.5 };
+        this.puffs.push(p);
+      }
+      const a = Math.random() * Math.PI * 2;
+      const v = speed * (0.4 + Math.random() * 0.6);
+      p.t = 0;
+      p.life = 0.35 + Math.random() * 0.3;
+      p.vx = Math.cos(a) * v;
+      p.vz = Math.sin(a) * v;
+      p.vy = v * (0.4 + Math.random() * 0.5);
+      p.sp.position.set(x, 6, -y);
+      (p.sp.material as THREE.SpriteMaterial).color.setHex(color);
+      p.sp.visible = true;
+    }
+  }
+
+  private updatePuffs(dt: number): void {
+    for (const p of this.puffs) {
+      if (p.t >= p.life) {
+        p.sp.visible = false;
+        continue;
+      }
+      p.t += dt;
+      const f = clamp(p.t / p.life, 0, 1);
+      p.sp.position.x += p.vx * dt;
+      p.sp.position.z += p.vz * dt;
+      p.sp.position.y += p.vy * dt;
+      p.vy -= 60 * dt; // gravity pulls the dust back down
+      (p.sp.material as THREE.SpriteMaterial).opacity = 0.8 * (1 - f);
+      p.sp.scale.setScalar(10 + 14 * f);
+    }
+  }
+
+  /** Glowing dots that travel switch -> target along the conduit. */
+  private spawnPulseDot(x0: number, y0: number, x1: number, y1: number): void {
+    let d = this.pulseDots.find((q) => q.t >= q.life);
+    if (!d) {
+      if (this.pulseDots.length >= 8) return;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: blobTexture('rgba(255,255,255,1)'), transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      sp.scale.setScalar(16);
+      this.fxGroup.add(sp);
+      d = { sp, x0, y0, x1, y1, t: 0, life: 0.45 };
+      this.pulseDots.push(d);
+    }
+    d.t = 0;
+    d.x0 = x0; d.y0 = y0; d.x1 = x1; d.y1 = y1;
+    d.sp.visible = true;
+  }
+
+  private updatePulseDots(dt: number): void {
+    for (const d of this.pulseDots) {
+      if (d.t >= d.life) {
+        d.sp.visible = false;
+        continue;
+      }
+      d.t += dt;
+      const f = clamp(d.t / d.life, 0, 1);
+      const e = f * f; // accelerate along the wire
+      d.sp.position.set(d.x0 + (d.x1 - d.x0) * e, 10, -(d.y0 + (d.y1 - d.y0) * e));
+      (d.sp.material as THREE.SpriteMaterial).opacity = 0.9 * (1 - f) * (0.4 + 0.6 * f);
+    }
+  }
+
   private updateRipples(dt: number): void {
     for (const r of this.ripples) {
       if (r.t >= r.life) {
@@ -1351,23 +1554,42 @@ export class Renderer3D implements OrbitalRenderer {
   private onEvent(e: SimEvent): void {
     switch (e.type) {
       case 'bounce':
+        this.bounceSquash = 1;
         this.spawnRipple(e.x, e.y, GRAVITY, 8, 46, 0.45);
+        this.spawnPuff(e.x, e.y, 0x9db8c0, Math.round(3 + clamp(e.speed / 200, 0, 5)), 0.8 + e.speed * 0.12);
+        this.screenShake(60 + e.speed * 0.06);
         break;
       case 'sink':
         this.spawnRipple(e.x, e.y, CUP_RING, 10, 130, 0.9);
+        this.spawnPuff(e.x, e.y, CUP_RING, 12, 3.2);
+        this.sinkPush = 1; // camera leans in for the beat
         break;
       case 'hazard':
         this.spawnRipple(e.x, e.y, DANGER, 10, 90, 0.6);
+        this.spawnPuff(e.x, e.y, DANGER, 8, 2.6);
         break;
       case 'voided':
         this.spawnRipple(e.x, e.y, 0xc9a0ff, 10, 110, 0.7);
         break;
       case 'launch':
         this.spawnRipple(e.x, e.y, GRAVITY, 6, 34, 0.35);
+        this.spawnPuff(e.x, e.y, GRAVITY, 5, 1.6);
         break;
       case 'pinPlace':
         this.spawnRipple(e.x, e.y, RELIC, 8, 60, 0.5);
+        this.spawnPuff(e.x, e.y, RELIC, 6, 1.4);
         break;
+      case 'fragment':
+        this.spawnPuff(e.x, e.y, RELIC, 12, 3);
+        this.spawnRipple(e.x, e.y, RELIC, 6, 70, 0.55);
+        break;
+      case 'switch': {
+        const sv = this.switchViews.find((s) => s.id === e.switchId);
+        if (sv) {
+          for (const t of sv.targets.slice(0, 2)) this.spawnPulseDot(sv.x, sv.y, t.x, t.y);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -1389,6 +1611,22 @@ export class Renderer3D implements OrbitalRenderer {
   }
 
   private updateCamera(w: World, dt: number): void {
+    // ease the user's orbit home on launch — aim keeps your view; flight,
+    // sink and the next tee all return to the honest bounds framing
+    if (w.ball.flying && !this.wasFlying) this.orbitHome = true;
+    this.wasFlying = w.ball.flying;
+    if (this.orbitHome && !this.orbiting) {
+      this.orbitYaw = expDamp(this.orbitYaw, 0, 3, dt);
+      this.orbitPitch = expDamp(this.orbitPitch, 0, 3, dt);
+      this.orbitZoom = expDamp(this.orbitZoom, 1, 3, dt);
+      if (Math.abs(this.orbitYaw) < 0.006 && Math.abs(this.orbitPitch) < 0.006 && Math.abs(this.orbitZoom - 1) < 0.006) {
+        this.orbitYaw = 0;
+        this.orbitPitch = 0;
+        this.orbitZoom = 1;
+        this.orbitHome = false;
+      }
+    }
+
     const b = w.def.bounds;
     // gentle follow while flying (never during aim — owner verdict), capped
     // so the course edge stays framed
@@ -1402,12 +1640,21 @@ export class Renderer3D implements OrbitalRenderer {
     this.baseLook.x = expDamp(this.baseLook.x, look.x, w.ball.flying ? 2.9 : 2.2, dt);
     this.baseLook.z = expDamp(this.baseLook.z, look.z, w.ball.flying ? 2.9 : 2.2, dt);
 
-    // flight zoom energy: quick 1.22x punch-in, relaxed return home
-    const tgt = w.ball.flying ? 1 / FLIGHT_ZOOM : 1;
+    // zoom stack: flight punch × user pinch × sink push
+    const tgt = (w.ball.flying ? 1 / FLIGHT_ZOOM : 1) * this.orbitZoom * (1 + this.sinkPush * 0.35);
     this.distScale = expDamp(this.distScale, tgt, w.ball.flying ? 7.5 : 3.2, dt);
+    if (this.sinkPush > 0) this.sinkPush = Math.max(0, this.sinkPush - dt * 1.2);
 
+    // orbit offsets rotate the base rig around the look target
+    const UP = new THREE.Vector3(0, 1, 0);
     const dir = this.basePos.clone().sub(this.baseLook);
-    const d0 = dir.length() / (this.distScale || 1);
+    dir.applyAxisAngle(UP, this.orbitYaw);
+    const len = dir.length();
+    const az = Math.atan2(dir.x, dir.z);
+    const elev = clamp(Math.asin(clamp(dir.y / len, -1, 1)) + this.orbitPitch, 0.3, 1.32);
+    dir.set(Math.sin(az) * Math.cos(elev), Math.sin(elev), Math.cos(az) * Math.cos(elev)).multiplyScalar(len);
+
+    const d0 = len / (this.distScale || 1);
     dir.setLength(d0);
     const pos = this.baseLook.clone().add(dir);
 

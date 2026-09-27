@@ -103,6 +103,7 @@ export class InputController {
 
   private pd = (e: PointerEvent): void => {
     if (!this.enabled || this.down) return;
+    if (!e.isPrimary) return; // second finger belongs to the 3D camera verb
     this.down = true;
     this.dragged = false;
     this.pointerId = e.pointerId;
