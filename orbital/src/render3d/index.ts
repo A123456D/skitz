@@ -825,7 +825,7 @@ export class Renderer3D implements OrbitalRenderer {
         pos[i * 3 + 1] = Math.sin(e) * r;
         pos[i * 3 + 2] = center.z + Math.sin(a) * Math.cos(e) * r;
         c.setHex(rnd() > 0.82 ? 0xbfd8ff : rnd() > 0.5 ? 0xdfeef2 : 0xfff2d8)
-          .multiplyScalar(0.45 + rnd() * 0.55);
+          .multiplyScalar(0.3 + rnd() * 0.26); // kept under the bloom threshold
         colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
       }
       const sg = new THREE.BufferGeometry();
@@ -847,7 +847,7 @@ export class Renderer3D implements OrbitalRenderer {
     // nebula blobs — layered cloud fields, theme hues, far side of the fog
     theme.nebulaColors.forEach((nc, i) => {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: cloudTexture(nc, w.def.id + ':neb' + i), transparent: true, opacity: theme.nebulaAlpha * 0.8,
+        map: cloudTexture(nc, w.def.id + ':neb' + i), transparent: true, opacity: theme.nebulaAlpha * 0.55,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
       }));
       const a = (i / theme.nebulaColors.length) * Math.PI * 2 + b.cx;
