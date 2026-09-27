@@ -29,7 +29,10 @@ function qa(): URLSearchParams {
   return new URLSearchParams(location.search);
 }
 
-export function bootGame(root: HTMLElement): void {
+export function bootGame(
+  root: HTMLElement,
+  createR: () => OrbitalRenderer = createRenderer,
+): void {
   root.innerHTML = '';
   const host = document.createElement('div');
   host.id = 'ob-canvas-host';
@@ -69,12 +72,12 @@ export function bootGame(root: HTMLElement): void {
   root.appendChild(rotate);
   root.appendChild(fullscreen);
 
-  const g = new Game(host, uiRoot);
+  const g = new Game(host, uiRoot, createR);
   void g.start();
 }
 
 class Game {
-  private renderer: OrbitalRenderer = createRenderer();
+  private renderer: OrbitalRenderer;
   private audio: OrbitalAudio = createAudio();
   private story: StoryRunner = createStoryRunner();
   private ui!: UIHandle;
@@ -110,7 +113,8 @@ class Game {
   private demoWorld: World | null = null;
   private demoWait = 0;
 
-  constructor(private host: HTMLElement, private uiRoot: HTMLElement) {
+  constructor(private host: HTMLElement, private uiRoot: HTMLElement, createR: () => OrbitalRenderer) {
+    this.renderer = createR();
     const q = qa();
     if (q.get('seed')) this.seed = Number(q.get('seed')) || 1;
   }
@@ -469,6 +473,9 @@ class Game {
       this.story.update(w, events);
       this.checkSecrets(w);
       this.updateIntensity(w);
+      // body hum: pitch tracks the dominant body's mass (contract-supported;
+      // was never driven by the glue before the 3D client)
+      this.audio.updateHum(w);
     }
     this.renderer.syncWorld(w, dt);
     this.ui.updateHud(w, w.pins.length, evaluateObjectives(w.def, w, this.hazardHappened, this.secretsFound));
