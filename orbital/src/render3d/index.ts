@@ -14,11 +14,15 @@
 // Reused verbatim from the 2D side: themes.ts, core.ts math, sim constants.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { MiloMood, OrbitalRenderer, PinGhost } from '../render/api';
 import type { PredPoint, SimEvent, World } from '../sim';
 import { BALL_R, HOLE_CAPTURE_R } from '../sim';
 import { themeSunPos, worldThemeFor } from '../render/themes';
-import { bgVariantFor, clamp, col, decayShake, expDamp, mixRGB, RAMP_FAST, RAMP_SLOW } from '../render/core';
+import { bgVariantFor, clamp, col, decayShake, expDamp, hashSeed, mixRGB, RAMP_FAST, RAMP_SLOW } from '../render/core';
 
 // ------------------------------------------------------------------ palette
 // Local copies of the icon-language colors (2D's textures.ts is Pixi-coupled).
@@ -69,6 +73,100 @@ function blobTexture(color: string): THREE.Texture {
   return radialTexture(color, 'rgba(0,0,0,0)');
 }
 
+// ------------------------------------------------- procedural body surfaces
+// One canvas per material (cached): enough recipe difference that a gas giant,
+// a rock and a machine-core never read as the same sphere.
+const bodyTexCache = new Map<string, THREE.Texture>();
+
+function bodyTexture(material: string): THREE.Texture | null {
+  if (bodyTexCache.has(material)) return bodyTexCache.get(material)!;
+  const look = MATERIAL_LOOK[material];
+  if (!look) return null;
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const g = cv.getContext('2d')!;
+  const base = `#${look.c.toString(16).padStart(6, '0')}`;
+  g.fillStyle = base;
+  g.fillRect(0, 0, S, S);
+  const shade = (f: number, a: number): string => {
+    const r = Math.round(((look.c >> 16) & 255) * f);
+    const gg = Math.round(((look.c >> 8) & 255) * f);
+    const b = Math.round((look.c & 255) * f);
+    return `rgba(${r},${gg},${b},${a})`;
+  };
+  let seed = hashSeed(material);
+  const rnd = (): number => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  if (material === 'gas') {
+    for (let y = 0; y < S; y += 8) {
+      g.fillStyle = shade(0.82 + rnd() * 0.36, 0.5);
+      g.fillRect(0, y, S, 4 + rnd() * 8);
+    }
+  } else if (material === 'rock' || material === 'organic') {
+    for (let i = 0; i < 90; i++) {
+      const r = 2 + rnd() * 9;
+      g.fillStyle = shade(rnd() > 0.5 ? 0.72 : 1.22, 0.4);
+      g.beginPath();
+      g.arc(rnd() * S, rnd() * S, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  } else if (material === 'ice') {
+    for (let i = 0; i < 26; i++) {
+      g.strokeStyle = shade(1.3, 0.5);
+      g.lineWidth = 1 + rnd() * 2;
+      g.beginPath();
+      const x0 = rnd() * S, y0 = rnd() * S;
+      g.moveTo(x0, y0);
+      g.lineTo(x0 + (rnd() - 0.5) * 90, y0 + (rnd() - 0.5) * 90);
+      g.stroke();
+    }
+  } else if (material === 'metal' || material === 'machine') {
+    for (let y = 0; y < S; y += 4) {
+      g.fillStyle = shade(0.9 + (y % 8 === 0 ? 0.28 : 0), 0.45);
+      g.fillRect(0, y, S, 2);
+    }
+    if (material === 'machine') {
+      g.strokeStyle = shade(0.55, 0.8);
+      g.lineWidth = 3;
+      for (let i = 0; i <= 4; i++) {
+        g.beginPath();
+        g.moveTo((i * S) / 4, 0); g.lineTo((i * S) / 4, S);
+        g.moveTo(0, (i * S) / 4); g.lineTo(S, (i * S) / 4);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(255,179,71,0.85)';
+      for (let i = 0; i < 6; i++) {
+        g.beginPath();
+        g.arc(20 + rnd() * (S - 40), 20 + rnd() * (S - 40), 3, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  } else if (material === 'molten') {
+    g.fillStyle = shade(0.42, 0.9);
+    g.fillRect(0, 0, S, S);
+    g.strokeStyle = 'rgba(255,120,40,0.9)';
+    g.lineWidth = 2;
+    for (let i = 0; i < 20; i++) {
+      g.beginPath();
+      let x = rnd() * S, y = rnd() * S;
+      g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) {
+        x += (rnd() - 0.5) * 60; y += (rnd() - 0.5) * 60;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  bodyTexCache.set(material, tex);
+  return tex;
+}
+
 // ==================================================================== class
 interface BodyView {
   mesh: THREE.Mesh;
@@ -111,6 +209,7 @@ export class Renderer3D implements OrbitalRenderer {
   private contactBlob: THREE.Mesh | null = null;
   private holeGroup = new THREE.Group();
   private beacon: THREE.Sprite | null = null;
+  private beam: THREE.Mesh | null = null;
   private beamViews: { pivot: THREE.Object3D; spin: number }[] = [];
   private fragmentViews: { mesh: THREE.Mesh; x: number; y: number; taken: boolean; phase: number }[] = [];
   private switchViews: { ring: THREE.Mesh; x: number; y: number }[] = [];
@@ -118,8 +217,29 @@ export class Renderer3D implements OrbitalRenderer {
   private debrisViews: THREE.Mesh[] = [];
   private pinViews: THREE.Group[] = [];
 
+  // post-processing (full tier): bloom sells every glowing landmark
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
+  // life: star twinkle layers, per-body drift particles, milo trail
+  private starLayers: THREE.Points[] = [];
+  private driftViews: {
+    pts: THREE.Points;
+    geom: THREE.BufferGeometry;
+    angles: Float32Array;
+    fracs: Float32Array;
+    speeds: Float32Array;
+    bodyIdx: number;
+    inward: boolean;
+    r0: number;
+    r1: number;
+  }[] = [];
+  private trailCount = 26;
+  private trailPositions: Float32Array;
+  private trailGeom: THREE.BufferGeometry;
+  private trail: THREE.Points;
+
   // aim/preview/ghost/last-shot primitives
-  private preview: THREE.InstancedMesh;
+  private preview: THREE.Points;
   private aimGroup = new THREE.Group();
   private aimLine: THREE.Line;
   private aimMat: THREE.LineBasicMaterial;
@@ -141,15 +261,19 @@ export class Renderer3D implements OrbitalRenderer {
   private ripples: Ripple[] = [];
 
   constructor() {
-    // --- preview arc: instanced dots along the predicted trajectory
-    const dotGeom = new THREE.SphereGeometry(9, 8, 6);
-    const dotMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 });
-    this.preview = new THREE.InstancedMesh(dotGeom, dotMat, 160);
-    this.preview.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.preview.count = 0;
-    this.preview.frustumCulled = false;
-    const white = new THREE.Color(0xffffff);
-    for (let i = 0; i < 160; i++) this.preview.setColorAt(i, white);
+    // --- preview arc: soft additive glow dots along the predicted trajectory
+    const dotPos = new Float32Array(160 * 3);
+    const dotCol = new Float32Array(160 * 3);
+    const dotGeom = new THREE.BufferGeometry();
+    dotGeom.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+    dotGeom.setAttribute('color', new THREE.BufferAttribute(dotCol, 3));
+    const preview = new THREE.Points(dotGeom, new THREE.PointsMaterial({
+      size: 34, map: blobTexture('rgba(255,255,255,1)'), vertexColors: true,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+    }));
+    preview.frustumCulled = false;
+    preview.geometry.setDrawRange(0, 0);
+    this.preview = preview;
 
     // --- aim arrow: a slim line + head, tinted by power
     this.aimMat = new THREE.LineBasicMaterial({ color: GRAVITY, transparent: true, opacity: 0.9 });
@@ -190,8 +314,19 @@ export class Renderer3D implements OrbitalRenderer {
     this.lastShot.visible = false;
     this.lastShot.frustumCulled = false;
 
+    // milo flight trail — a fading ribbon of recent positions
+    this.trailPositions = new Float32Array(this.trailCount * 3);
+    this.trailGeom = new THREE.BufferGeometry();
+    this.trailGeom.setAttribute('position', new THREE.BufferAttribute(this.trailPositions, 3));
+    this.trail = new THREE.Points(this.trailGeom, new THREE.PointsMaterial({
+      color: 0xbfe8f0, size: 15, sizeAttenuation: true, transparent: true,
+      opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    this.trail.frustumCulled = false;
+    this.trail.visible = false;
+
     this.scene.add(this.worldGroup, this.fxGroup, this.milo, this.holeGroup,
-      this.preview, this.aimGroup, this.ghost, this.lastShot);
+      this.preview, this.aimGroup, this.ghost, this.lastShot, this.trail);
   }
 
   // ------------------------------------------------------------- contract
@@ -209,6 +344,12 @@ export class Renderer3D implements OrbitalRenderer {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
     this.resize();
+    // bloom composer (full tier only): the glow behind every landmark
+    this.composer = new EffectComposer(r);
+    this.composer.addPass(new RenderPass(this.scene, this.cam));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.host?.clientWidth ?? 1280, this.host?.clientHeight ?? 720), 0.62, 0.5, 0.55);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
     // QA handle (mirrors the ?level/?seed param family): console-level access
     // to the live 3D view for browser debugging.
     (window as unknown as Record<string, unknown>).__ob3d = this;
@@ -222,7 +363,8 @@ export class Renderer3D implements OrbitalRenderer {
 
     this.updateDynamic(w, dt);
     this.updateCamera(w, dt);
-    this.renderer.render(this.scene, this.cam);
+    if (this.quality === 'full' && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.cam);
   }
 
   onEvents(events: SimEvent[]): void {
@@ -231,19 +373,19 @@ export class Renderer3D implements OrbitalRenderer {
 
   setPreview(points: PredPoint[] | null, _end: string | null): void {
     const n = points ? Math.min(points.length, 160) : 0;
-    const m = new THREE.Matrix4();
+    const pos = this.preview.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colr = this.preview.geometry.getAttribute('color') as THREE.BufferAttribute;
     const c = new THREE.Color();
     for (let i = 0; i < n; i++) {
       const p = points![i];
-      m.makeTranslation(p.x, 4, -p.y);
-      this.preview.setMatrixAt(i, m);
+      pos.setXYZ(i, p.x, 4, -p.y);
       const t01 = n > 1 ? i / (n - 1) : 0;
       c.setHex(mixRGB(mixRGB(RAMP_SLOW, 0x9df0c8, t01), 0xffffff, 0.12));
-      this.preview.setColorAt(i, c);
+      colr.setXYZ(i, c.r, c.g, c.b);
     }
-    this.preview.count = n;
-    this.preview.instanceMatrix.needsUpdate = true;
-    if (this.preview.instanceColor) this.preview.instanceColor.needsUpdate = true;
+    pos.needsUpdate = true;
+    colr.needsUpdate = true;
+    this.preview.geometry.setDrawRange(0, n);
   }
 
   setLastShot(points: { x: number; y: number }[] | null): void {
@@ -327,6 +469,7 @@ export class Renderer3D implements OrbitalRenderer {
     this.renderer.setSize(w, h, false);
     this.cam.aspect = w / h;
     this.cam.updateProjectionMatrix();
+    this.composer?.setSize(w, h);
   }
 
   destroy(): void {
@@ -342,14 +485,21 @@ export class Renderer3D implements OrbitalRenderer {
   // -------------------------------------------------------------- rebuild
 
   private clearWorld(): void {
-    this.worldGroup.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
-      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else mat?.dispose();
-    });
-    this.worldGroup.clear();
+    const disposeTree = (root: THREE.Object3D): void => {
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat?.dispose();
+      });
+      root.clear();
+    };
+    disposeTree(this.worldGroup);
+    disposeTree(this.holeGroup);
+    disposeTree(this.milo);
+    this.miloMesh = null;
+    this.contactBlob = null;
     this.fxGroup.clear();
     this.bodyViews = [];
     this.beamViews = [];
@@ -358,6 +508,8 @@ export class Renderer3D implements OrbitalRenderer {
     this.wormViews = [];
     this.debrisViews = [];
     this.pinViews = [];
+    this.starLayers = [];
+    this.driftViews = [];
     this.beacon = null;
   }
 
@@ -414,6 +566,27 @@ export class Renderer3D implements OrbitalRenderer {
     ground.position.set(b.cx, -0.5, -b.cy);
     ground.receiveShadow = true;
     this.worldGroup.add(ground);
+
+    // nebula light-pools lying on the plane — echoes of the 2D fog, they lift
+    // the mid-tones and give the table its "space, not floor" read
+    theme.nebulaColors.forEach((nc, i) => {
+      const patch = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: blobTexture(nc), transparent: true, opacity: 0.09,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      patch.rotation.x = -Math.PI / 2;
+      patch.rotation.z = hashSeed(w.def.id + i) % 628 / 100;
+      const a = (i / theme.nebulaColors.length) * Math.PI * 2 + 0.7;
+      const px2 = b.cx + Math.cos(a) * b.rx * (0.45 + 0.2 * i);
+      const py2 = b.cy + Math.sin(a) * b.ry * (0.45 + 0.2 * i);
+      patch.position.set(px2, 0.15, -py2);
+      const s = Math.max(b.rx, b.ry) * (1.1 + 0.25 * i);
+      patch.scale.set(s, s * 0.72, 1);
+      this.worldGroup.add(patch);
+    });
 
     // --- bounds ellipse (dashed gravity line)
     const pts: THREE.Vector3[] = [];
@@ -494,29 +667,32 @@ export class Renderer3D implements OrbitalRenderer {
     dome.position.copy(center);
     this.worldGroup.add(dome);
 
-    // sparse icon sky: stars in the upper hemisphere
-    const n = Math.round(750 * theme.starDensity);
-    const pos = new Float32Array(n * 3);
-    const colArr = new Float32Array(n * 3);
-    const c = new THREE.Color();
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const e = Math.asin(0.08 + Math.random() * 0.9);
-      const r = 52000;
-      pos[i * 3] = center.x + Math.cos(a) * Math.cos(e) * r;
-      pos[i * 3 + 1] = Math.sin(e) * r;
-      pos[i * 3 + 2] = center.z + Math.sin(a) * Math.cos(e) * r;
-      c.setHex(0xdfeef2).multiplyScalar(0.35 + Math.random() * 0.65);
-      colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+    // sparse icon sky: stars in the upper hemisphere, two layers for twinkle
+    for (let layer = 0; layer < 2; layer++) {
+      const n = Math.round(375 * theme.starDensity);
+      const pos = new Float32Array(n * 3);
+      const colArr = new Float32Array(n * 3);
+      const c = new THREE.Color();
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const e = Math.asin(0.08 + Math.random() * 0.9);
+        const r = 52000;
+        pos[i * 3] = center.x + Math.cos(a) * Math.cos(e) * r;
+        pos[i * 3 + 1] = Math.sin(e) * r;
+        pos[i * 3 + 2] = center.z + Math.sin(a) * Math.cos(e) * r;
+        c.setHex(0xdfeef2).multiplyScalar(0.35 + Math.random() * 0.65);
+        colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+      }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      sg.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+      const stars = new THREE.Points(sg, new THREE.PointsMaterial({
+        size: 140, vertexColors: true, transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      this.starLayers.push(stars);
+      this.worldGroup.add(stars);
     }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    sg.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
-    const stars = new THREE.Points(sg, new THREE.PointsMaterial({
-      size: 140, vertexColors: true, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    this.worldGroup.add(stars);
 
     // nebula blobs — additive, theme hues, kept under the pad's brightness
     theme.nebulaColors.forEach((nc, i) => {
@@ -587,21 +763,31 @@ export class Renderer3D implements OrbitalRenderer {
     const look = MATERIAL_LOOK[bd.material] ?? MATERIAL_LOOK.rock;
     const seg = this.quality === 'full' ? 40 : 20;
     const isGas = bd.material === 'gas';
+    const isCrystal = bd.material === 'crystal';
+    const tex = bodyTexture(bd.material);
     const mat = new THREE.MeshStandardMaterial({
-      color: look.c, roughness: look.rough, metalness: look.metal,
-      flatShading: false,
+      color: 0xffffff,
+      map: tex ?? undefined,
+      roughness: look.rough,
+      metalness: look.metal,
+      flatShading: isCrystal,
     });
     if (bd.kind === 'unstable') {
       mat.emissive = new THREE.Color(0xffd9a0);
       mat.emissiveIntensity = 0.35;
     }
     if (isGas) {
-      // faint banded look via slight emissive lift so gas giants read creamy
       mat.emissive = new THREE.Color(look.c);
       mat.emissiveIntensity = 0.12;
     }
+    if (bd.material === 'molten') {
+      mat.emissive = new THREE.Color(0xff5a1e);
+      mat.emissiveIntensity = 0.55;
+      mat.emissiveMap = tex ?? null;
+    }
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(bd.radius, seg, Math.round(seg * 0.66)), mat);
     mesh.position.set(bd.x, bd.radius, -bd.y);
+    mesh.rotation.z = (hashSeed(bd.id) % 100) / 100 - 0.5; // axial tilt
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.worldGroup.add(mesh);
@@ -665,6 +851,36 @@ export class Renderer3D implements OrbitalRenderer {
       mark.rotation.x = -Math.PI / 2;
       mark.position.set(bd.x, 0.8, -bd.y);
       this.worldGroup.add(mark);
+    }
+
+    // field drift particles — the gravity vector made visible: in for
+    // attractors, out for repulsors (§9, same read as the 2D layer)
+    if (bd.radius > 0 || bd.kind === 'anchor') {
+      const n = this.quality === 'full' ? 14 : 7;
+      const dPos = new Float32Array(n * 3);
+      const dg = new THREE.BufferGeometry();
+      dg.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
+      const pts = new THREE.Points(dg, new THREE.PointsMaterial({
+        color: GRAVITY, size: 10, sizeAttenuation: true, transparent: true,
+        opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      pts.frustumCulled = false;
+      this.worldGroup.add(pts);
+      const angles = new Float32Array(n);
+      const fracs = new Float32Array(n);
+      const speeds = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        angles[i] = (i / n) * Math.PI * 2 + Math.random();
+        fracs[i] = Math.random();
+        speeds[i] = 0.3 + Math.random() * 0.35;
+      }
+      this.driftViews.push({
+        pts, geom: dg, angles, fracs, speeds,
+        bodyIdx: this.bodyViews.length,
+        inward: bd.kind !== 'repulsor',
+        r0: bd.radius * 1.3 + 8,
+        r1: Math.min(bd.influenceR * 0.8, bd.radius + 220),
+      });
     }
 
     this.bodyViews.push({
@@ -740,6 +956,19 @@ export class Renderer3D implements OrbitalRenderer {
     this.beacon.position.y = 12;
     this.beacon.scale.setScalar(cap * 5);
     g.add(this.beacon);
+
+    // light column — "greens are the last lit places" made literal
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(cap * 0.55, cap * 0.95, 300, 24, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: CUP_GREEN, transparent: true, opacity: 0.1,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+      }),
+    );
+    beam.position.y = 150;
+    beam.name = 'beaconBeam';
+    g.add(beam);
+    this.beam = beam;
 
     // moving-hole path dots
     if (w.def.hole.path) {
@@ -922,23 +1151,58 @@ export class Renderer3D implements OrbitalRenderer {
   // --------------------------------------------------------------- dynamic
 
   private updateDynamic(w: World, dt: number): void {
-    // Milo
-    this.milo.position.set(w.ball.x, w.ball.flying ? BALL_R * 1.1 : BALL_R, -w.ball.y);
+    // Milo — exponentially smoothed toward the 60 Hz sim position so motion
+    // stays fluid when the display runs faster than the tick rate
+    const tx = w.ball.x, tz = -w.ball.y;
+    const ty = w.ball.flying ? BALL_R * 1.1 : BALL_R;
+    const k = w.ball.flying ? 24 : 40;
+    this.milo.position.x = expDamp(this.milo.position.x, tx, k, dt);
+    this.milo.position.y = expDamp(this.milo.position.y, ty, k, dt);
+    this.milo.position.z = expDamp(this.milo.position.z, tz, k, dt);
     const sunkNow = w.ball.sunk || w.ball.dead;
     if (this.miloMesh) {
       const s = sunkNow ? Math.max(0.001, this.miloMesh.scale.x - dt * 4) : 1;
       this.miloMesh.scale.setScalar(s);
       this.milo.visible = s > 0.01;
     }
-    if (this.contactBlob) this.contactBlob.position.set(0, -this.milo.position.y + 0.35, 0);
+    // contact shadow: grounded when settled, a faint drop while airborne
+    if (this.contactBlob) {
+      this.contactBlob.position.set(0, -this.milo.position.y + 0.35, 0);
+      const bm = this.contactBlob.material as THREE.MeshBasicMaterial;
+      const target = w.ball.flying ? 0.16 : 0.42;
+      bm.opacity = expDamp(bm.opacity, target, 8, dt);
+    }
+    // flight trail: shift the ribbon, write the newest head point
+    this.trail.visible = w.ball.flying;
+    if (w.ball.flying) {
+      const p = this.trailPositions;
+      for (let i = this.trailCount - 1; i > 0; i--) {
+        p[i * 3] = p[(i - 1) * 3];
+        p[i * 3 + 1] = p[(i - 1) * 3 + 1];
+        p[i * 3 + 2] = p[(i - 1) * 3 + 2];
+      }
+      p[0] = w.ball.x; p[1] = BALL_R * 0.9; p[2] = -w.ball.y;
+      (this.trailGeom.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+      this.trailGeom.setDrawRange(0, this.trailCount);
+    }
 
-    // hole (moving greens)
-    this.holeGroup.position.set(w.holeX, 0, -w.holeY);
+    // hole (moving greens) — damped like Milo so the green glides
+    this.holeGroup.position.x = expDamp(this.holeGroup.position.x, w.holeX, 20, dt);
+    this.holeGroup.position.z = expDamp(this.holeGroup.position.z, -w.holeY, 20, dt);
     if (this.beacon) {
       // 30%-duty beacon, same read as the 2D hole hint
       const duty = (this.t % 3.6) / 3.6 < 0.5 ? 1 : 0.35;
       (this.beacon.material as THREE.SpriteMaterial).opacity = 0.28 * duty;
       this.beacon.scale.setScalar((w.def.hole.captureR ?? HOLE_CAPTURE_R) * (4.4 + 0.8 * duty));
+    }
+    if (this.beam) {
+      const beamMat = this.beam.material as THREE.MeshBasicMaterial;
+      beamMat.opacity = 0.05 + 0.05 * (0.5 + 0.5 * Math.sin(this.t * 1.4));
+    }
+    // star twinkle — the two layers breathe out of phase
+    for (let i = 0; i < this.starLayers.length; i++) {
+      const sm = this.starLayers[i].material as THREE.PointsMaterial;
+      sm.opacity = 0.68 + 0.24 * Math.sin(this.t * (1.1 + i * 0.6) + i * 2.1);
     }
 
     // bodies
@@ -987,6 +1251,29 @@ export class Renderer3D implements OrbitalRenderer {
         pv.position.set(w.pins[i].x, 0, -w.pins[i].y);
         pv.rotation.y += dt * 0.4;
       }
+    }
+
+    // field drift particles animate (in = attractor, out = repulsor)
+    for (const dv of this.driftViews) {
+      const bd = w.bodies[dv.bodyIdx];
+      const active = !!bd && bd.active && bd.muCurrent > 0;
+      dv.pts.visible = active;
+      if (!active) continue;
+      const arr = dv.geom.getAttribute('position') as THREE.BufferAttribute;
+      const n = dv.angles.length;
+      for (let i = 0; i < n; i++) {
+        dv.angles[i] += dt * dv.speeds[i] * 0.5;
+        dv.fracs[i] += (dv.inward ? -1 : 1) * dt * dv.speeds[i];
+        if (dv.fracs[i] > 1) dv.fracs[i] -= 1;
+        if (dv.fracs[i] < 0) dv.fracs[i] += 1;
+        const f = dv.fracs[i];
+        const r = dv.r0 + (dv.r1 - dv.r0) * f;
+        const a = dv.angles[i];
+        const bx = w.bodies[dv.bodyIdx].cx;
+        const by = w.bodies[dv.bodyIdx].cy;
+        arr.setXYZ(i, bx + Math.cos(a) * r, 4 + Math.sin(a * 3) * 3, -(by + Math.sin(a) * r));
+      }
+      arr.needsUpdate = true;
     }
 
     this.updateRipples(dt);
@@ -1133,6 +1420,15 @@ export class Renderer3D implements OrbitalRenderer {
     }
     this.cam.position.copy(pos);
     this.cam.lookAt(this.baseLook);
+
+    // screen-space minimums (mobile): keep Milo legible at phone zoom by
+    // scaling the rig when pixels-per-world-unit drop too far
+    const dist = pos.distanceTo(this.baseLook);
+    const viewH = this.host?.clientHeight ?? 720;
+    const pxPerWorld = viewH / (2 * dist * Math.tan((FOV * Math.PI) / 360));
+    const minPx = matchMedia('(pointer: coarse)').matches ? 13 : 9;
+    const s = clamp(minPx / (2 * BALL_R * pxPerWorld), 1, 2.8);
+    this.milo.scale.setScalar(expDamp(this.milo.scale.x, s, 6, dt));
   }
 }
 

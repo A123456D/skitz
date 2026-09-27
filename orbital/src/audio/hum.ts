@@ -16,7 +16,7 @@ export interface HumEngine {
   dispose(): void;
 }
 
-const MAX_BODIES = 6;
+const MAX_BODIES = 3;
 const MAX_PINS = 3;
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);

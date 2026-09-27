@@ -96,6 +96,8 @@ class Game {
   private hazardHappened = false;
   private secretsFound = new Set<string>();
   private unlockedAudio = false;
+  /** Hum voices currently sounding (flight-only ambience). */
+  private humOn = false;
   private isTouch = matchMedia('(pointer: coarse)').matches;
   /** Real-time remaining of the sink slow-mo beat. */
   private sinkSlowT = 0;
@@ -158,8 +160,14 @@ class Game {
     this.ui.show('title');
 
     this.input = new InputController(this.host, {
-      onAim: (dx, dy, p) => this.updateAim(dx, dy, p),
-      onAimEnd: (dx, dy, p) => this.fire(dx, dy, p),
+      onAim: (dx, dy, p, drag) => {
+        const d = this.planeDir(dx, dy, drag);
+        this.updateAim(d.x, d.y, p);
+      },
+      onAimEnd: (dx, dy, p, drag) => {
+        const d = this.planeDir(dx, dy, drag);
+        this.fire(d.x, d.y, p);
+      },
       onAimCancel: () => {
         this.renderer.setAim(false, 0, 0, 0);
         this.renderer.setPreview(null, null);
@@ -411,6 +419,26 @@ class Game {
     this.renderer.setPinGhost({ x: wpt.x, y: wpt.y, valid });
   }
 
+  /** Un-project a screen-space drag into a world-plane direction. The raw
+   *  screen vector is only honest on the 2D ortho view; the tilted 3D camera
+   *  foreshortens depth, so the drag endpoints are ray-planned onto the plane
+   *  and the DIRECTION is taken there. Power stays screen-based (feel knob).
+   *  Ortho/2D mapping is a uniform scale, so 2D behavior is unchanged. */
+  private planeDir(dx: number, dy: number, drag?: { x0: number; y0: number; x1: number; y1: number }): { x: number; y: number } {
+    if (!drag) return { x: dx, y: dy }; // keyboard aim
+    try {
+      const w0 = this.renderer.screenToWorld(drag.x0, drag.y0);
+      const w1 = this.renderer.screenToWorld(drag.x1, drag.y1);
+      const wx = w0.x - w1.x;
+      const wy = w0.y - w1.y;
+      const len = Math.hypot(wx, wy);
+      if (len < 1e-3) return { x: dx, y: dy };
+      return { x: wx / len, y: wy / len };
+    } catch {
+      return { x: dx, y: dy };
+    }
+  }
+
   // ------------------------------------------------------------------ loop
 
   private loop = (t: number): void => {
@@ -473,9 +501,15 @@ class Game {
       this.story.update(w, events);
       this.checkSecrets(w);
       this.updateIntensity(w);
-      // body hum: pitch tracks the dominant body's mass (contract-supported;
-      // was never driven by the glue before the 3D client)
-      this.audio.updateHum(w);
+      // body hum only while the ball flies — gravity proximity made audible
+      // without an aim-time drone. Voices fade out via stopHum on landing.
+      if (w.ball.flying) {
+        this.audio.updateHum(w);
+        this.humOn = true;
+      } else if (this.humOn) {
+        this.humOn = false;
+        (this.audio as OrbitalAudio & { stopHum?(): void }).stopHum?.();
+      }
     }
     this.renderer.syncWorld(w, dt);
     this.ui.updateHud(w, w.pins.length, evaluateObjectives(w.def, w, this.hazardHappened, this.secretsFound));

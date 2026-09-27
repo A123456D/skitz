@@ -1,10 +1,19 @@
 // Pointer + keyboard input for the aim/pin loop. Produces high-level intents;
 // the game state machine decides what they mean.
 
+export interface DragEnds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 export interface InputCallbacks {
-  /** Drag aim in progress (slingshot pull). power01 0..1. */
-  onAim(dirX: number, dirY: number, power01: number): void;
-  onAimEnd(dirX: number, dirY: number, power01: number): void;
+  /** Drag aim in progress (slingshot pull). power01 0..1. `drag` carries the
+   *  raw screen endpoints so the game can un-project direction into world
+   *  space (3D view) — undefined for keyboard aim. */
+  onAim(dirX: number, dirY: number, power01: number, drag?: DragEnds): void;
+  onAimEnd(dirX: number, dirY: number, power01: number, drag?: DragEnds): void;
   onAimCancel(): void;
   /** Short tap with no drag — pin placement intent. */
   onTap(sx: number, sy: number): void;
@@ -87,7 +96,9 @@ export class InputController {
     if (len < DRAG_THRESHOLD) return;
     const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * this.maxDragFrac;
     const power01 = Math.min(1, len / maxDrag);
-    this.cb.onAim(dx / len, dy / len, this.powerCurve(power01));
+    this.cb.onAim(dx / len, dy / len, this.powerCurve(power01), {
+      x0: this.startX, y0: this.startY, x1: this.curX, y1: this.curY,
+    });
   }
 
   private pd = (e: PointerEvent): void => {
@@ -141,7 +152,9 @@ export class InputController {
         this.cb.onAimCancel();
       } else {
         const maxDrag = Math.min(this.el.clientWidth, this.el.clientHeight) * this.maxDragFrac;
-        this.cb.onAimEnd(dx / len, dy / len, this.powerCurve(Math.min(1, len / maxDrag)));
+        this.cb.onAimEnd(dx / len, dy / len, this.powerCurve(Math.min(1, len / maxDrag)), {
+          x0: this.startX, y0: this.startY, x1: this.curX, y1: this.curY,
+        });
       }
       return;
     }
