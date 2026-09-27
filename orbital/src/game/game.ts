@@ -6,7 +6,7 @@ import {
   predict, STEP_DT, MAX_LAUNCH_SPEED,
 } from '../sim';
 import type { LevelDef, SimEvent, StrokeEndReason, World } from '../sim';
-import { createRenderer } from '../render';
+import { createRenderer } from '../render3d';
 import type { OrbitalRenderer } from '../render/api';
 import { createAudio } from '../audio';
 import type { OrbitalAudio, AudioTheme } from '../audio/api';

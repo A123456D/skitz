@@ -216,6 +216,7 @@ export class Renderer3D implements OrbitalRenderer {
   private wormViews: { a: THREE.Object3D; b: THREE.Object3D }[] = [];
   private debrisViews: THREE.Mesh[] = [];
   private pinViews: THREE.Group[] = [];
+  private bumperViews: { tower: THREE.Mesh; flashRing: THREE.Mesh; x: number; y: number; r: number; flash: number }[] = [];
 
   // post-processing (full tier): bloom sells every glowing landmark
   private composer: EffectComposer | null = null;
@@ -620,6 +621,7 @@ export class Renderer3D implements OrbitalRenderer {
     this.wormViews = [];
     this.debrisViews = [];
     this.pinViews = [];
+    this.bumperViews = [];
     this.starLayers = [];
     this.driftViews = [];
     this.beacon = null;
@@ -700,6 +702,9 @@ export class Renderer3D implements OrbitalRenderer {
       this.worldGroup.add(patch);
     });
 
+    // per-archetype ground pattern — the table itself carries the theme
+    this.addGroundPattern(w, bgVariantFor(w.def.id));
+
     // --- bounds ellipse (dashed gravity line)
     const pts: THREE.Vector3[] = [];
     const N = 128;
@@ -757,23 +762,93 @@ export class Renderer3D implements OrbitalRenderer {
     this.fitCamera(w.def.bounds);
   }
 
+  /** Ground furniture per silhouette archetype: grid, arcs, craters, bands. */
+  private addGroundPattern(w: World, variant: number): void {
+    const b = w.def.bounds;
+    let seed = hashSeed(w.def.id + ':ground');
+    const rnd = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    if (variant === 5) {
+      // grid: survey lines every 220u
+      const pts: THREE.Vector3[] = [];
+      const R = Math.max(b.rx, b.ry) * 1.35;
+      for (let gx = -R; gx <= R; gx += 220) {
+        pts.push(px(b.cx + gx, b.cy - R, 0.3), px(b.cx + gx, b.cy + R, 0.3));
+        pts.push(px(b.cx - R, b.cy + gx, 0.3), px(b.cx + R, b.cy + gx, 0.3));
+      }
+      const gg = new THREE.BufferGeometry().setFromPoints(pts);
+      this.worldGroup.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({
+        color: GRAVITY, transparent: true, opacity: 0.06,
+      })));
+    } else if (variant === 0) {
+      // arches: concentric guide rings
+      for (let i = 1; i <= 3; i++) {
+        const pts: THREE.Vector3[] = [];
+        const N = 90;
+        for (let j = 0; j <= N; j++) {
+          const a = (j / N) * Math.PI * 2;
+          pts.push(px(b.cx + Math.cos(a) * b.rx * (i / 3.4), b.cy + Math.sin(a) * b.ry * (i / 3.4), 0.3));
+        }
+        const ag = new THREE.BufferGeometry().setFromPoints(pts);
+        this.worldGroup.add(new THREE.Line(ag, new THREE.LineBasicMaterial({
+          color: GRAVITY, transparent: true, opacity: 0.07,
+        })));
+      }
+    } else if (variant === 1 || variant === 2) {
+      // wreck/craters: dark scorch patches
+      for (let i = 0; i < 9; i++) {
+        const patch = new THREE.Mesh(
+          new THREE.CircleGeometry(60 + rnd() * 130, 20),
+          new THREE.MeshBasicMaterial({ color: 0x010605, transparent: true, opacity: 0.35, depthWrite: false }),
+        );
+        patch.rotation.x = -Math.PI / 2;
+        const a = rnd() * Math.PI * 2;
+        patch.position.set(b.cx + Math.cos(a) * b.rx * (0.3 + rnd() * 0.85), 0.2, -(b.cy + Math.sin(a) * b.ry * (0.3 + rnd() * 0.85)));
+        this.worldGroup.add(patch);
+      }
+    } else if (variant === 3) {
+      // horizon: mown bands
+      for (let i = 1; i <= 4; i += 2) {
+        const band = new THREE.Mesh(
+          new THREE.RingGeometry(0, 1, 56),
+          new THREE.MeshBasicMaterial({ color: GRAVITY, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }),
+        );
+        band.rotation.x = -Math.PI / 2;
+        band.position.set(b.cx, 0.15, -b.cy);
+        band.scale.set(b.rx * (i / 4), b.ry * (i / 4), 1);
+        this.worldGroup.add(band);
+      }
+    }
+  }
+
   // -------------------------------------------------------------- builders
 
   private buildSky(w: World, theme: ReturnType<typeof worldThemeFor>, sunDir: THREE.Vector3): void {
     const b = w.def.bounds;
     const center = px(b.cx, b.cy);
 
-    // gradient dome
+    // gradient dome — brightens on the key-light side for honest depth
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
         top: { value: new THREE.Color(col(theme.skyTop)) },
         bottom: { value: new THREE.Color(col(theme.skyBottom)) },
+        sunTint: { value: new THREE.Color(col(theme.sunColor)) },
+        sunDir: { value: sunDir.clone().normalize() },
       },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform vec3 top; uniform vec3 bottom; varying vec3 vP;
-        void main(){ float h = normalize(vP).y; gl_FragColor = vec4(mix(bottom, top, smoothstep(-0.08, 0.65, h)), 1.0); }`,
+      fragmentShader: `uniform vec3 top; uniform vec3 bottom; uniform vec3 sunTint; uniform vec3 sunDir; varying vec3 vP;
+        void main(){
+          vec3 d = normalize(vP);
+          float h = d.y;
+          vec3 col = mix(bottom, top, smoothstep(-0.08, 0.65, h));
+          float sunGlow = pow(max(dot(d, sunDir), 0.0), 6.0) * 0.22;
+          col += sunTint * sunGlow;
+          gl_FragColor = vec4(col, 1.0);
+        }`,
     });
     const dome = new THREE.Mesh(new THREE.SphereGeometry(60000, 32, 18), skyMat);
     dome.position.copy(center);
@@ -831,6 +906,64 @@ export class Renderer3D implements OrbitalRenderer {
     // derived from the level id exactly like the 2D background variants
     const silhouette = new THREE.MeshBasicMaterial({ color: 0x030b0a });
     const variant = bgVariantFor(w.def.id);
+    const levelHash = hashSeed(w.def.id);
+
+    // the horizon companion — a huge distant world rising at this level's own
+    // bearing (the icon's limb made scenery). ~half the levels give it a ring.
+    const hBearing = (levelHash % 360) * (Math.PI / 180);
+    const hDist = 46000;
+    const hSize = 5200 + (levelHash % 11) * 900;
+    const hColor = new THREE.Color(col(theme.skyTop)).lerp(new THREE.Color(col(theme.accentTint)), 0.45).multiplyScalar(0.85);
+    const horizon = new THREE.Group();
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(hSize, 48),
+      new THREE.MeshBasicMaterial({ color: hColor, fog: false }),
+    );
+    const limb = new THREE.Mesh(
+      new THREE.RingGeometry(hSize * 0.985, hSize * 1.01, 48),
+      new THREE.MeshBasicMaterial({
+        color: col(theme.accentTint), transparent: true, opacity: 0.5,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+      }),
+    );
+    horizon.add(disc, limb);
+    if (levelHash % 5 < 2) {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(hSize * 1.22, hSize * 1.38, 56),
+        new THREE.MeshBasicMaterial({
+          color: col(theme.sunColor), transparent: true, opacity: 0.22,
+          side: THREE.DoubleSide, depthWrite: false,
+        }),
+      );
+      ring.rotation.x = 0.35 + (levelHash % 7) / 20;
+      horizon.add(ring);
+    }
+    horizon.position.set(
+      center.x + Math.sin(hBearing) * hDist,
+      hSize * 0.35,
+      center.z + Math.cos(hBearing) * hDist,
+    );
+    horizon.lookAt(center.x, hSize * 0.35, center.z);
+    this.worldGroup.add(horizon);
+
+    // aurora ribbons on the aurora archetype — tall slow-breathing veils
+    if (variant === 4) {
+      for (let i = 0; i < 3; i++) {
+        const ribbon = new THREE.Mesh(
+          new THREE.PlaneGeometry(9000 + i * 3200, 16000 + i * 2200, 1, 1),
+          new THREE.MeshBasicMaterial({
+            color: col(theme.nebulaColors[i % theme.nebulaColors.length]),
+            transparent: true, opacity: 0.055,
+            blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+          }),
+        );
+        const ra = hBearing + 1.2 + i * 1.5;
+        ribbon.position.set(center.x + Math.sin(ra) * 38000, 8200 + i * 900, center.z + Math.cos(ra) * 38000);
+        ribbon.lookAt(center.x, 8200 + i * 900, center.z);
+        this.worldGroup.add(ribbon);
+      }
+    }
+
     const ringR = 1.28;
     const put = (i: number, n: number, obj: THREE.Object3D, hScale: number) => {
       const a = (i / n) * Math.PI * 2 + variant;
@@ -1138,15 +1271,31 @@ export class Renderer3D implements OrbitalRenderer {
   private addHazard(h: World['hazards'][number]): void {
     const d = h.def;
     if (d.kind === 'barrier') {
+      // derelict hull section: slab + glowing edge strip + struts
       const len = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y);
-      const wall = new THREE.Mesh(
+      const grp = new THREE.Group();
+      const slab = new THREE.Mesh(
         new THREE.BoxGeometry(len, 22, 8),
-        new THREE.MeshStandardMaterial({ color: 0x4a545e, roughness: 0.6, metalness: 0.3 }),
+        new THREE.MeshStandardMaterial({ color: 0x4a545e, roughness: 0.55, metalness: 0.4 }),
       );
-      wall.position.set((d.a.x + d.b.x) / 2, 11, -(d.a.y + d.b.y) / 2);
-      wall.rotation.y = Math.atan2(-(d.b.x - d.a.x), -(d.b.y - d.a.y));
-      wall.castShadow = true;
-      this.worldGroup.add(wall);
+      const edge = new THREE.Mesh(
+        new THREE.BoxGeometry(len * 0.98, 2.2, 9),
+        new THREE.MeshBasicMaterial({ color: GRAVITY, transparent: true, opacity: 0.8 }),
+      );
+      edge.position.y = 10.5;
+      for (const s of [-1, 1]) {
+        const strut = new THREE.Mesh(
+          new THREE.BoxGeometry(4, 26, 10),
+          new THREE.MeshStandardMaterial({ color: 0x39424c, roughness: 0.7, metalness: 0.3 }),
+        );
+        strut.position.set(s * len * 0.38, 0, 0);
+        grp.add(strut);
+      }
+      slab.castShadow = true;
+      grp.add(slab, edge);
+      grp.position.set((d.a.x + d.b.x) / 2, 11, -(d.a.y + d.b.y) / 2);
+      grp.rotation.y = Math.atan2(-(d.b.x - d.a.x), -(d.b.y - d.a.y));
+      this.worldGroup.add(grp);
     } else if (d.kind === 'bumper') {
       const tower = new THREE.Mesh(
         new THREE.CylinderGeometry(d.r, d.r * 1.12, 26, 24),
@@ -1157,10 +1306,33 @@ export class Renderer3D implements OrbitalRenderer {
       );
       tower.position.set(d.x, 13, -d.y);
       tower.castShadow = true;
-      this.worldGroup.add(tower);
+      const band = new THREE.Mesh(
+        new THREE.TorusGeometry(d.r * 1.05, 2.4, 8, 32),
+        new THREE.MeshBasicMaterial({ color: AMBER, transparent: true, opacity: 0.85 }),
+      );
+      band.rotation.x = Math.PI / 2;
+      band.position.y = 9;
+      const flashRing = new THREE.Mesh(
+        new THREE.TorusGeometry(d.r * 1.3, 1.6, 8, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xffd9a0, transparent: true, opacity: 0,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      flashRing.rotation.x = Math.PI / 2;
+      flashRing.position.y = 14;
+      this.worldGroup.add(tower, band, flashRing);
+      this.bumperViews.push({ tower, flashRing, x: d.x, y: d.y, r: d.r, flash: 0 });
     } else if (d.kind === 'beam') {
       const pivot = new THREE.Group();
       pivot.position.set(d.x, 8, -d.y);
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(10, 12, 16, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0x4a545e, roughness: 0.5, metalness: 0.5,
+          emissive: new THREE.Color(DANGER), emissiveIntensity: 0.3,
+        }),
+      );
       const arm = new THREE.Mesh(
         new THREE.BoxGeometry(d.len * 2, 10, 6),
         new THREE.MeshStandardMaterial({
@@ -1168,9 +1340,26 @@ export class Renderer3D implements OrbitalRenderer {
           emissive: new THREE.Color(DANGER), emissiveIntensity: 0.4,
         }),
       );
+      const tipA = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 12, 7),
+        new THREE.MeshBasicMaterial({ color: DANGER }),
+      );
+      tipA.position.x = d.len;
+      const tipB = tipA.clone();
+      tipB.position.x = -d.len;
       arm.castShadow = true;
-      pivot.add(arm);
-      this.worldGroup.add(pivot);
+      pivot.add(hub, arm, tipA, tipB);
+      // sweep telegraph: the disc the arm covers, drawn on the floor
+      const sweep = new THREE.Mesh(
+        new THREE.RingGeometry(d.len * 0.55, d.len + 10, 48),
+        new THREE.MeshBasicMaterial({
+          color: DANGER, transparent: true, opacity: 0.06,
+          side: THREE.DoubleSide, depthWrite: false,
+        }),
+      );
+      sweep.rotation.x = -Math.PI / 2;
+      sweep.position.set(d.x, 0.5, -d.y);
+      this.worldGroup.add(pivot, sweep);
       this.beamViews.push({ pivot, spin: d.spin });
     }
   }
@@ -1376,6 +1565,15 @@ export class Renderer3D implements OrbitalRenderer {
       pv.visible = live;
     }
 
+    // bumpers flash when the ball slams them (bounce near a bumper)
+    for (const bv of this.bumperViews) {
+      bv.flash = Math.max(0, bv.flash - dt * 2.6);
+      const fm = bv.flashRing.material as THREE.MeshBasicMaterial;
+      fm.opacity = bv.flash * 0.9;
+      bv.flashRing.scale.setScalar(1 + (1 - bv.flash) * 0.5);
+      (bv.tower.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25 + bv.flash * 1.5;
+    }
+
     this.updatePuffs(dt);
     this.updatePulseDots(dt);
     // field drift particles animate (in = attractor, out = repulsor)
@@ -1553,12 +1751,24 @@ export class Renderer3D implements OrbitalRenderer {
 
   private onEvent(e: SimEvent): void {
     switch (e.type) {
-      case 'bounce':
+      case 'bounce': {
         this.bounceSquash = 1;
         this.spawnRipple(e.x, e.y, GRAVITY, 8, 46, 0.45);
         this.spawnPuff(e.x, e.y, 0x9db8c0, Math.round(3 + clamp(e.speed / 200, 0, 5)), 0.8 + e.speed * 0.12);
         this.screenShake(60 + e.speed * 0.06);
+        // nearest bumper in reach flashes
+        let best: (typeof this.bumperViews)[number] | null = null;
+        let bestD = Infinity;
+        for (const bv of this.bumperViews) {
+          const d2 = Math.hypot(bv.x - e.x, bv.y - e.y);
+          if (d2 < bv.r + 30 && d2 < bestD) {
+            best = bv;
+            bestD = d2;
+          }
+        }
+        if (best) best.flash = 1;
         break;
+      }
       case 'sink':
         this.spawnRipple(e.x, e.y, CUP_RING, 10, 130, 0.9);
         this.spawnPuff(e.x, e.y, CUP_RING, 12, 3.2);

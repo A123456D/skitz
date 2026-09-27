@@ -1,5 +1,5 @@
 // ORBITAL offline shell — minimal game-shell cache, not a framework.
-const CACHE = 'orbital-v1';
+const CACHE = 'orbital-v3-3d';
 const SHELL = ['/', '/index.html', '/icon.svg', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
