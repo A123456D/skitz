@@ -30,7 +30,7 @@ export const MAX_LAUNCH_SPEED = 900;
 export const HOLE_CAPTURE_R = 30;
 export const BOOST_IMPULSE = 200;
 /** Cup funnel: slow balls near the cup get curled in — real cups hold the ball. */
-export const CUP_FUNNEL_R_MULT = 2.6;
+export const CUP_FUNNEL_R_MULT = 1.8;
 export const CUP_FUNNEL_A = 90;
 
 const f1: FieldSample = makeFieldSample();

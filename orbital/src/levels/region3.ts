@@ -17,7 +17,7 @@ export const R3_LEVELS: LevelDef[] = [
     hole: { x: 1620, y: 1180 },
     bounds: { cx: 1075, cy: 740, rx: 1430, ry: 880 },
     bodies: [
-      { id: 'titan', kind: 'attractor', x: 1250, y: 760, radius: 170, mu: 2.6e7, influenceR: 1100, material: 'gas' },
+      { id: 'titan', kind: 'attractor', x: 1250, y: 760, radius: 170, mu: 3.2e7, influenceR: 1100, material: 'gas' },
     ],
     fragments: [
       { x: 1250, y: 300 }, // high apex, deep in the giant\u2019s grip
@@ -63,7 +63,7 @@ export const R3_LEVELS: LevelDef[] = [
     hole: { x: 2100, y: 700 },
     bounds: { cx: 1200, cy: 635, rx: 1640, ry: 880 },
     bodies: [
-      { id: 'yes', kind: 'attractor', x: 1000, y: 450, radius: 70, mu: 5e6, influenceR: 500, material: 'metal' },
+      { id: 'yes', kind: 'attractor', x: 1000, y: 450, radius: 70, mu: 6.5e6, influenceR: 500, material: 'metal' },
       { id: 'no', kind: 'repulsor', x: 1500, y: 1000, radius: 70, mu: 5e6, influenceR: 500, material: 'metal' },
     ],
     hazards: [{ id: 'flipper', kind: 'bumper', x: 1600, y: 640, r: 26, boost: 200 }],
@@ -160,7 +160,7 @@ export const R3_LEVELS: LevelDef[] = [
     hole: { x: 1980, y: 560 },
     bounds: { cx: 1140, cy: 750, rx: 1530, ry: 1120 },
     bodies: [
-      { id: 'alpha', kind: 'attractor', x: 950, y: 450, radius: 120, mu: 2.2e7, influenceR: 900, material: 'gas' },
+      { id: 'alpha', kind: 'attractor', x: 950, y: 450, radius: 120, mu: 2.6e7, influenceR: 900, material: 'gas' },
       { id: 'beta', kind: 'attractor', x: 1650, y: 1050, radius: 120, mu: 2.2e7, influenceR: 900, material: 'ice' },
     ],
     fragments: [

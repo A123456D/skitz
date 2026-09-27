@@ -14,10 +14,10 @@ export const R2_LEVELS: LevelDef[] = [
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
-    hole: { x: 2000, y: 760 },
+    hole: { x: 2060, y: 560 },
     bounds: { cx: 1150, cy: 665, rx: 1560, ry: 620 },
     bodies: [
-      { id: 'hulk', kind: 'attractor', x: 1200, y: 700, radius: 75, mu: 5e6, influenceR: 520, material: 'machine' },
+      { id: 'hulk', kind: 'attractor', x: 1200, y: 700, radius: 75, mu: 7e6, influenceR: 560, material: 'machine' },
     ],
     debris: [
       { x: 850, y: 600, r: 12, vx: 8, vy: -4 },
@@ -25,6 +25,7 @@ export const R2_LEVELS: LevelDef[] = [
       { x: 1250, y: 450, r: 9, vx: 4, vy: 8 },
       { x: 1500, y: 900, r: 13, vx: -8, vy: -5 },
       { x: 1700, y: 600, r: 8, vx: 5, vy: 5 },
+      { x: 1520, y: 760, r: 16, vx: -4, vy: -3 },
     ],
     fragments: [
       { x: 1200, y: 380 }, // over the hulk, through the drifting stones
@@ -129,12 +130,12 @@ export const R2_LEVELS: LevelDef[] = [
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
-    hole: { x: 2000, y: 680 },
+    hole: { x: 2060, y: 540 },
     bounds: { cx: 1150, cy: 790, rx: 1560, ry: 880 },
     bodies: [
       {
         id: 'storm', kind: 'unstable', x: 1200, y: 720, radius: 70, mu: 6e6, influenceR: 550, material: 'molten',
-        muMin: 2.5e6, muMax: 8.5e6, wanderT: 1.0,
+        muMin: 3.5e6, muMax: 8.5e6, wanderT: 1.0,
       },
     ],
     zones: [{ id: 'murk', kind: 'damp', x: 1500, y: 1000, radius: 230, strength: 0.45 }],

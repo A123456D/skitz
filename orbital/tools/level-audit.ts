@@ -122,9 +122,30 @@ function solveLevel(
 }
 
 const regionArg = process.argv[2] ? Number(process.argv[2]) : 0;
+const showId = process.argv[3];
+
+function showAces(def: LevelDef): void {
+  const w0 = createWorld(def, 7, 1);
+  startStroke(w0, true);
+  const base = Math.atan2(w0.holeY - def.tee.y, w0.holeX - def.tee.x);
+  const found: string[] = [];
+  for (let a = -180; a < 180; a += 15) {
+    const ray = base + (a * Math.PI) / 180;
+    for (const pow of [140, 180, 230, 280, 340, 420, 500, 600, 700, 850]) {
+      const w = createWorld(def, 7, 1);
+      startStroke(w, true);
+      const res = predict(w, Math.cos(ray) * pow, Math.sin(ray) * pow, HORIZON, 10);
+      if (res.end === 'sunk') found.push(a > 0 ? '+' + a + 'deg @ ' + pow : a + 'deg @ ' + pow);
+    }
+  }
+  console.log(def.id + ' ' + def.name + ': ' + found.length + ' direct aces');
+  for (const f of found.slice(0, 14)) console.log('  ' + f);
+}
 const results: string[] = [];
 
 for (const def of LEVELS) {
+  if (showId && def.id !== showId) continue;
+  if (showId) { showAces(def); continue; }
   if (regionArg && def.region !== regionArg) continue;
   const mods = 1; // gravity scale
   const plain = solveLevel(def, 7, mods, def.par + 1, false);
