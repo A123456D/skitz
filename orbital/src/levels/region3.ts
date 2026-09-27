@@ -20,6 +20,11 @@ export const R3_LEVELS: LevelDef[] = [
     tee: { x: 300, y: 780 },
     hole: { x: 1620, y: 1180 },
     bounds: { cx: 1075, cy: 740, rx: 1430, ry: 880 },
+    hazards: [
+      // the ring shard: a broken arc of the Titan's ring — walls the fast
+      // upper-limb skim; the honest way in is under the limb
+      { id: 'shard', kind: 'barrier', a: { x: 1050, y: 530 }, b: { x: 1300, y: 560 } },
+    ],
     bodies: [
       { id: 'titan', kind: 'attractor', x: 1250, y: 760, radius: 170, mu: 3.2e7, influenceR: 1100, material: 'gas' },
       // The crown: a massless housing at the orbit's apex — direct lobs over the
@@ -120,7 +125,7 @@ export const R3_LEVELS: LevelDef[] = [
         ],
       },
     ],
-    hint: 'Ride the seam into the flip disc — inside it, everything reverses. Consent throws you; Refusal catches the throw.',
+    hint: 'Ride the seam into the flip disc — inside it everything reverses. A hot dive off the flip is the ace; Refusal flattens it onto the cup.',
   },
   {
     id: 'L17',
