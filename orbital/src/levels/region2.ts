@@ -1,6 +1,10 @@
 // ORBITAL — Region 2: THE GRAVEYARD (L08–L14).
-// Wrecks, debris, unease. Each level combines TWO ideas; materials are machine
-// and metal (the fleet that lost the Grand Open). Pins 1–2, par 3–4. Milo: curious.
+// Wrecks, debris, unease — every hole is hostile now: barrier ribs cage the
+// derelict, a third blade sweeps the green approach, the storm kills on touch
+// above a no-go void well, the Wanderer runs a dogleg, the bait gate is spiked,
+// and the moving green meets you only where the lens and gongs allow.
+// Materials machine/metal (the fleet that lost the Grand Open). Pins 1–2,
+// par 3–4. Milo: curious.
 import type { LevelDef } from '../sim';
 
 export const R2_LEVELS: LevelDef[] = [
@@ -9,8 +13,9 @@ export const R2_LEVELS: LevelDef[] = [
     name: 'Driftwood',
     region: 2,
     concept:
-      'A field of drifting wreck-scatter: every stone is in your way or in your service. ' +
-      'Debris as cover AND tool — the safe line banks off the derelict\u2019s hull to shed speed for the capture.',
+      'A caged derelict in a drifting wreck-scatter: three broken ribs of the hulk\u2019s superstructure ' +
+      'wall the high approach, the over-the-top lane, and the low skim-exit, so the only line is the ' +
+      'bank OFF the hulk\u2019s hull itself — debris as weather, the dead station as tool.',
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
@@ -18,6 +23,14 @@ export const R2_LEVELS: LevelDef[] = [
     bounds: { cx: 1150, cy: 665, rx: 1560, ry: 620 },
     bodies: [
       { id: 'hulk', kind: 'attractor', x: 1200, y: 700, radius: 75, mu: 7e6, influenceR: 560, material: 'machine' },
+    ],
+    hazards: [
+      // the rib cage: high-left approach, over-the-top lane, low skim-exit
+      { id: 'rib1', kind: 'barrier', a: { x: 980, y: 470 }, b: { x: 1180, y: 520 } },
+      { id: 'rib2', kind: 'barrier', a: { x: 1450, y: 430 }, b: { x: 1600, y: 470 } },
+      { id: 'rib3', kind: 'barrier', a: { x: 1420, y: 860 }, b: { x: 1600, y: 810 } },
+      // the block: rounds off the slow diver's exit under rib3
+      { id: 'block', kind: 'bumper', x: 1650, y: 830, r: 30, boost: 240 },
     ],
     debris: [
       { x: 850, y: 600, r: 12, vx: 8, vy: -4 },
@@ -30,7 +43,7 @@ export const R2_LEVELS: LevelDef[] = [
     fragments: [
       { x: 1200, y: 380 }, // over the hulk, through the drifting stones
       { x: 1520, y: 950 }, // deep in the lower scatter
-      { x: 820, y: 560 }, // high entry lane past debris
+      { x: 820, y: 560 }, // high entry lane past the first rib
     ],
     objectives: [{ id: 'o1', kind: 'touch', targetId: 'hulk', text: 'Leave a dent on the derelict.' }],
     story: [
@@ -63,14 +76,16 @@ export const R2_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'The ribs own the sky and the low road. Skim the hulk\u2019s hull itself — let the capture shed your speed.',
   },
   {
     id: 'L09',
     name: 'The Wreck',
     region: 2,
     concept:
-      'A broken station\u2019s defense grid still spins: two counter-rotating blades share one hub, ' +
-      'and the only way through is THE TINY GAP between the scissors — read the rotation, pick your second.',
+      'A broken station\u2019s defense grid still spins: two counter-rotating blades share one hub, and a ' +
+      'third sweeper patrols the green approach behind them. The only way through is THE TINY GAP between ' +
+      'the scissors — read both rotations, pick your second.',
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
@@ -82,11 +97,17 @@ export const R2_LEVELS: LevelDef[] = [
     hazards: [
       { id: 'b1', kind: 'beam', x: 1200, y: 700, len: 200, r: 12, spin: 0.9 },
       { id: 'b2', kind: 'beam', x: 1200, y: 700, len: 200, r: 12, spin: -0.65, phase: 2.4 },
+      // the approach sweeper: crossing the scissors only buys you the next gate
+      { id: 'b3', kind: 'beam', x: 1640, y: 620, len: 100, r: 9, spin: 1.3 },
+    ],
+    debris: [
+      { x: 1400, y: 800, r: 7, vx: 4, vy: -3 },
+      { x: 1350, y: 580, r: 6, vx: -3, vy: 4 },
     ],
     fragments: [
       { x: 1370, y: 540 }, // inside the blade sweep — timed run
       { x: 950, y: 900 }, // low entry lane
-      { x: 1620, y: 560 }, // past the scissors, high
+      { x: 1620, y: 560 }, // past the scissors, inside the sweeper's reach
     ],
     objectives: [{ id: 'o1', kind: 'noHazard', text: 'Cross the scissors untouched.' }],
     story: [
@@ -125,8 +146,9 @@ export const R2_LEVELS: LevelDef[] = [
     name: 'Bad Weather',
     region: 2,
     concept:
-      'One storming flare-star cannot decide how heavy it is: read the surging field and launch into ' +
-      'the lull — while resisting the safe-looking murk below, where gravity goes syrup-slow.',
+      'One storming flare-star cannot decide how heavy it is — and it kills on contact: read the surging ' +
+      'field, launch into the lull, and skim as close as your nerve allows. Below, the safe-looking murk ' +
+      'is syrup, and a dead void well short of the green swallows every lazy approach.',
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
@@ -135,10 +157,14 @@ export const R2_LEVELS: LevelDef[] = [
     bodies: [
       {
         id: 'storm', kind: 'unstable', x: 1200, y: 720, radius: 70, mu: 6e6, influenceR: 550, material: 'molten',
-        muMin: 3.5e6, muMax: 8.5e6, wanderT: 1.0,
+        muMin: 3.5e6, muMax: 8.5e6, wanderT: 1.0, deadly: true,
       },
     ],
-    zones: [{ id: 'murk', kind: 'damp', x: 1500, y: 1000, radius: 230, strength: 0.45 }],
+    zones: [
+      { id: 'murk', kind: 'damp', x: 1500, y: 1000, radius: 230, strength: 0.45 },
+      // the no-go well: dead gravity short of the green — no borrowed finishes
+      { id: 'well', kind: 'void', x: 1560, y: 780, radius: 170, strength: 1 },
+    ],
     fragments: [
       { x: 1200, y: 350 }, // high over the storm — bend depth is the bet
       { x: 1450, y: 1000 }, // deep in the murk
@@ -175,14 +201,16 @@ export const R2_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'The well is dead and the murk is slow — the honest line rides the storm\u2019s mood at a skim.',
   },
   {
     id: 'L11',
     name: 'The Slingshot',
     region: 2,
     concept:
-      'A wanderer has crossed this fairway since the Open: launch while it blocks and it steals your ball; ' +
-      'launch when it turns and its wake hands you to the green. Alignment — timing a moving planet.',
+      'A wanderer has run this dogleg since the Open: high corner, then a plunge across the low field — ' +
+      'two crossings of your fairway per lap. Launch while it blocks and it steals your ball; launch when ' +
+      'it turns and its wake hands you to the green. Alignment — timing a moving planet.',
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
@@ -191,14 +219,22 @@ export const R2_LEVELS: LevelDef[] = [
     bodies: [
       {
         id: 'wanderer', kind: 'path', x: 700, y: 300, radius: 55, mu: 4.5e6, influenceR: 480, material: 'metal',
-        path: { points: [{ x: 700, y: 300 }, { x: 1700, y: 1100 }], speed: 90, mode: 'pingpong' },
+        path: {
+          points: [{ x: 700, y: 300 }, { x: 1700, y: 500 }, { x: 1200, y: 1100 }],
+          speed: 90, mode: 'pingpong',
+        },
       },
     ],
     hazards: [{ id: 'bell', kind: 'bumper', x: 1350, y: 720, r: 30, boost: 260 }],
+    debris: [
+      { x: 1000, y: 420, r: 8, vx: 5, vy: 3 },
+      { x: 1550, y: 750, r: 8, vx: -4, vy: 5 },
+      { x: 1650, y: 950, r: 7, vx: -5, vy: -4 },
+    ],
     fragments: [
-      { x: 700, y: 1000 }, // under the wanderer\u2019s low end — risky when it dips
+      { x: 1150, y: 1200 }, // under the wanderer\u2019s plunge — risky when it dives
       { x: 1350, y: 950 }, // under the bell — the bank line
-      { x: 1750, y: 420 }, // over the wanderer\u2019s high end
+      { x: 1750, y: 420 }, // over the wanderer\u2019s high corner
     ],
     objectives: [{ id: 'o1', kind: 'touch', targetId: 'bell', text: 'Ring the crossing bell.' }],
     story: [
@@ -225,14 +261,16 @@ export const R2_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'The high wake-line is the ace — and it only exists when the Wanderer is up. Time the dogleg; fire into its wake.',
   },
   {
     id: 'L12',
     name: 'The False Path',
     region: 2,
     concept:
-      'The obvious lane is baited: two pretty lantern-stars funnel every careless ball through a gate ' +
-      'straight into the dead stove. The honest line refuses the gate and swings wide through the lure\u2019s amplified sky.',
+      'The obvious lane is baited: two pretty lantern-stars funnel every careless ball through a spiked ' +
+      'gate straight into the dead stove — the barrier across the throat makes the trap honest. The real ' +
+      'line refuses the gate and swings wide through the lure\u2019s amplified sky.',
     par: 3,
     pinBudget: 1,
     tee: { x: 300, y: 720 },
@@ -243,6 +281,10 @@ export const R2_LEVELS: LevelDef[] = [
       { id: 'lantern2', kind: 'attractor', x: 1050, y: 820, radius: 30, mu: 3.5e6, influenceR: 400, material: 'ice' },
       // mu ~0: pure trap, all mouth.
       { id: 'stove', kind: 'attractor', x: 1450, y: 800, radius: 65, mu: 1e5, influenceR: 260, material: 'molten', deadly: true },
+    ],
+    hazards: [
+      // the spike: seals the baited gate's throat — the funnel was never a route
+      { id: 'spike', kind: 'barrier', a: { x: 1020, y: 690 }, b: { x: 1150, y: 760 } },
     ],
     zones: [{ id: 'lure', kind: 'amp', x: 1000, y: 380, radius: 200, strength: 2.2 }],
     fragments: [
@@ -357,8 +399,9 @@ export const R2_LEVELS: LevelDef[] = [
     name: 'The Moving Green',
     region: 2,
     concept:
-      'The finale green of the Grand Open never stopped circling its lighthouse star. ' +
-      'Stop chasing it and start MEETING it: read the lap, lead the target, arrive when it does.',
+      'The finale green of the Grand Open never stopped circling its lighthouse star — and the lighthouse ' +
+      'fights back: an amp lens burns over the near chord and gong-bumpers post the bottom and the flat. ' +
+      'Stop chasing and start MEETING the lap where the course allows: read it, lead it, arrive when it does.',
     par: 3,
     pinBudget: 1,
     tee: { x: 350, y: 720 },
@@ -376,10 +419,19 @@ export const R2_LEVELS: LevelDef[] = [
     },
     bounds: { cx: 925, cy: 720, rx: 1080, ry: 620 },
     bodies: [
-      { id: 'beacon', kind: 'attractor', x: 1200, y: 720, radius: 55, mu: 5e6, influenceR: 520, material: 'machine' },
+      { id: 'beacon', kind: 'attractor', x: 1200, y: 720, radius: 55, mu: 5.5e6, influenceR: 560, material: 'machine' },
+    ],
+    hazards: [
+      // the gongs: the bottom chord and the flat lane are posted
+      { id: 'gong1', kind: 'bumper', x: 1200, y: 950, r: 22, boost: 160 },
+      { id: 'gong2', kind: 'bumper', x: 820, y: 700, r: 22, boost: 160 },
+    ],
+    zones: [
+      // the lens: the lighthouse beam burns the near chord — meetings there get whipped
+      { id: 'lens', kind: 'amp', x: 950, y: 550, radius: 170, strength: 2.0 },
     ],
     fragments: [
-      { x: 1200, y: 1020 }, // bottom of the ring, deep in the field
+      { x: 1200, y: 1020 }, // bottom of the ring, past the gong
       { x: 900, y: 720 }, // left of the ring — the hole passes right here
       { x: 760, y: 500 }, // high entry diagonal
     ],
@@ -407,5 +459,6 @@ export const R2_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'The lens owns the near chord, the gongs own the bottom. Lead the lap on the far chord — a perfect lead is the ace.',
   },
 ];

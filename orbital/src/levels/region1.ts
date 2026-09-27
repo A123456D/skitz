@@ -1,8 +1,11 @@
-// ORBITAL — Region 1: THE PRACTICE ORBIT (L01–L07).
-// Teaching arc: ONE new mechanic per level — attractor → barrier → capture →
-// repulsor → void → PINS → two-body. Calm celestial architecture, generous
+// ORBITAL — Region 1: THE APPROACH (L01–L07).
+// Teaching arc: ONE new verb per level, made geometric — the bend (attractor),
+// the wall (barrier), the orbit (capture + gatepost), the shove (repulsor) under
+// a sweeper, the dead pocket (void) + rim kiss, PINS behind a dead well, the
+// two-body weave through a bumper gate. Calm celestial architecture, generous
 // budgets (pins 2, par 2–3). Milo arc: confused.
-// Variety rule: each level is one named idea; no archetype repeats in-region.
+// Variety rule: each level is one named idea; every guard obstacle kills the
+// naive lane and opens the crafted one.
 import type { LevelDef } from '../sim';
 
 export const R1_LEVELS: LevelDef[] = [
@@ -11,20 +14,26 @@ export const R1_LEVELS: LevelDef[] = [
     name: 'First Contact',
     region: 1,
     concept:
-      'One planet between tee and green: what does gravity want to do to my ball? ' +
-      'The direct line is blocked; a wide aim gets bent back down to the green.',
+      'THE BEND, made geometric: Asterion sits square on the flat lane, so straight is death. ' +
+      'The only fairway is the wide arc — aim past the planet and let its pull swing you down onto ' +
+      'the green, while the little vigil moon beyond swallows anything hit too hard.',
     par: 2,
     pinBudget: 2,
     tee: { x: 260, y: 720 },
     hole: { x: 2020, y: 660 },
-    bounds: { cx: 1140, cy: 640, rx: 1600, ry: 470 },
+    bounds: { cx: 1140, cy: 640, rx: 1600, ry: 560 },
     bodies: [
-      { id: 'asterion', kind: 'attractor', x: 1150, y: 700, radius: 70, mu: 5e6, influenceR: 520, material: 'rock' },
+      { id: 'asterion', kind: 'attractor', x: 1150, y: 700, radius: 70, mu: 6e6, influenceR: 560, material: 'rock' },
+      // The pincer: vigil above the green, vale squat on the low skim-exit lane.
+      // Overpower the bend and vigil eats you; skim under the planet and vale
+      // bounces you — the wide, judged bend is the only fairway.
+      { id: 'vigil', kind: 'attractor', x: 2100, y: 780, radius: 22, mu: 1.8e6, influenceR: 280, material: 'rock' },
+      { id: 'vale', kind: 'attractor', x: 1560, y: 845, radius: 40, mu: 1.6e6, influenceR: 260, material: 'rock' },
     ],
     fragments: [
       { x: 1150, y: 430 }, // apex of the bend, high over Asterion
       { x: 1330, y: 850 }, // skim below-behind the planet
-      { x: 1870, y: 560 }, // high line into the green
+      { x: 1870, y: 560 }, // high line into the green, shy of the vigil
     ],
     objectives: [
       { id: 'o1', kind: 'secret', x: 1240, y: 840, r: 60, text: 'Discover what waits behind Asterion.' },
@@ -61,27 +70,34 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
-    hint: 'Aim wide of the planet — its pull will bend the ball back down toward the green.',
+    hint:
+      'The flat lane dies on Asterion. Aim wide, let the planet bend you back down onto the green — ' +
+      'and mind the vigil moon past the cup: power is not the verb here.',
   },
   {
     id: 'L02',
     name: 'The Bend',
     region: 1,
     concept:
-      'A Barrier Pylon seals the fairway: the only route is a mortar over its tip, ' +
-      'cornered tight by the small star parked above the wall. Bend around a barrier.',
+      'THE WALL: the Pylon seals the fairway floor-to-sky, and its raised tip pinches the only gap ' +
+      'against the small star parked above the wall. The crafted shot is a committed mortar that ' +
+      'hugs the corner — Vell\u2019s pull swings it down the far side, and a lazy line kisses the corner bumper.',
     par: 2,
     pinBudget: 2,
     tee: { x: 260, y: 720 },
     hole: { x: 1900, y: 610 },
     bounds: { cx: 1080, cy: 570, rx: 1500, ry: 900 },
     bodies: [
-      { id: 'vell', kind: 'attractor', x: 1400, y: 240, radius: 60, mu: 5e6, influenceR: 520, material: 'ice' },
+      { id: 'vell', kind: 'attractor', x: 1410, y: 235, radius: 60, mu: 5e6, influenceR: 520, material: 'ice' },
     ],
-    hazards: [{ id: 'pylon', kind: 'barrier', a: { x: 1150, y: 470 }, b: { x: 1150, y: 1000 } }],
+    hazards: [
+      { id: 'pylon', kind: 'barrier', a: { x: 1150, y: 430 }, b: { x: 1150, y: 1000 } },
+      // the corner kiss: clears an over-cooked mortar back down toward the green
+      { id: 'corner', kind: 'bumper', x: 1215, y: 470, r: 22, boost: 150 },
+    ],
     fragments: [
       { x: 1400, y: 110 }, // over the top of Vell — the committed line
-      { x: 1240, y: 430 }, // the corner itself, just past the tip
+      { x: 1265, y: 430 }, // the corner itself, just past the tip
       { x: 760, y: 520 }, // high entry lane
     ],
     objectives: [{ id: 'o1', kind: 'noHazard', text: 'Never feed the Pylon.' }],
@@ -109,15 +125,16 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
-    hint: 'Clear the top of the Pylon — the star beyond the tip pulls you down the far side.',
+    hint: 'Clear the top of the Pylon tight to the corner — the star beyond the tip pulls you down the far side.',
   },
   {
     id: 'L03',
     name: 'Capture',
     region: 1,
     concept:
-      'THE ORBIT: a wide planet fills the middle and the green hides on its far side. ' +
-      'Capture into the swing, let gravity hold you, and release through the hole at exactly the right point.',
+      'THE ORBIT: a wide planet fills the middle and the green hides on its far side. The gatepost ' +
+      'anchor sits square on the naive lob lane and drags it down into Kore\u2019s grip — so you capture into ' +
+      'the swing on purpose, let gravity hold you, and release through the hole at exactly the right point.',
     par: 3,
     pinBudget: 2,
     tee: { x: 450, y: 720 },
@@ -125,6 +142,9 @@ export const R1_LEVELS: LevelDef[] = [
     bounds: { cx: 1005, cy: 685, rx: 1050, ry: 550 },
     bodies: [
       { id: 'kore', kind: 'attractor', x: 1200, y: 720, radius: 80, mu: 6e6, influenceR: 620, material: 'gas' },
+      // The gatepost: massless marker hanging over the orbit's front door — it
+      // drags lazy high lobs down into Kore's grip instead of letting them clear.
+      { id: 'gatepost', kind: 'anchor', x: 1000, y: 430, radius: 0, mu: 3e6, influenceR: 360, material: 'rock' },
     ],
     fragments: [
       { x: 1200, y: 420 }, // top of the orbit ring
@@ -156,15 +176,16 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
-    hint: 'Fire just wide of Kore and let the capture carry you around — the green waits on the far side of the swing.',
+    hint: 'Fire at the gatepost and let it hand you into Kore\u2019s swing — the green waits on the far side of the orbit.',
   },
   {
     id: 'L04',
     name: 'Pushback',
     region: 1,
     concept:
-      'A star that only says no: approach Sola and it shoves you away. ' +
-      'Pass below its rim and the rejection itself steers the ball down onto the green — the repulsor slingshot.',
+      'THE SHOVE: approach Sola and it pushes you away. The crafted lane passes under its rim and lets ' +
+      'the rejection itself steer the ball down onto the green — while a sweeper beam scythes the mortar ' +
+      'lane over the top and a kiss bumper banks the low line home. The repulsor slingshot.',
     par: 2,
     pinBudget: 2,
     tee: { x: 300, y: 720 },
@@ -172,6 +193,12 @@ export const R1_LEVELS: LevelDef[] = [
     bounds: { cx: 1140, cy: 580, rx: 1530, ry: 660 },
     bodies: [
       { id: 'sola', kind: 'repulsor', x: 1150, y: 560, radius: 60, mu: 5e6, influenceR: 520, material: 'metal' },
+    ],
+    hazards: [
+      // sweeper over the mortar lane: the over-the-top lob must be timed or refused
+      { id: 'sweeper', kind: 'beam', x: 1720, y: 480, len: 120, r: 10, spin: 0.5 },
+      // the low-line kiss: banks the under-rim slingshot onto the green
+      { id: 'kiss', kind: 'bumper', x: 1560, y: 730, r: 24, boost: 180 },
     ],
     fragments: [
       { x: 1150, y: 260 }, // deep in the push zone, high line
@@ -202,29 +229,35 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'Pass under Sola\u2019s rim and let the shove steer you — the sweeper owns the sky, the kiss owns the low bank.',
   },
   {
     id: 'L05',
     name: 'Still Air',
     region: 1,
     concept:
-      'A dead pocket where gravity itself has been switched off: slow balls die in the middle of nothing. ' +
-      'Momentum is everything — hit through the void, then let Anemo catch and carry you home.',
+      'THE DEAD POCKET: a void well sits square on the fairway where gravity itself is switched off, and ' +
+      'the green hangs HIGH beyond it — flat and low lines sail under the cup and die in nothing. Momentum ' +
+      'is everything: hit through the still air on a rising line off Anemo\u2019s catch, or bank the rim kiss home.',
     par: 2,
     pinBudget: 2,
     tee: { x: 300, y: 720 },
-    hole: { x: 2050, y: 560 },
+    hole: { x: 2050, y: 470 },
     bounds: { cx: 1175, cy: 700, rx: 1600, ry: 620 },
     bodies: [
       // The Bell: nearly massless marker mid-void — pure objective, zero help.
       { id: 'bell', kind: 'attractor', x: 1150, y: 700, radius: 26, mu: 2e5, influenceR: 200, material: 'rock' },
-      { id: 'anemo', kind: 'attractor', x: 1700, y: 660, radius: 55, mu: 4e6, influenceR: 420, material: 'gas' },
+      { id: 'anemo', kind: 'attractor', x: 1700, y: 660, radius: 55, mu: 4e6, influenceR: 430, material: 'gas' },
     ],
-    zones: [{ id: 'still', kind: 'void', x: 1150, y: 700, radius: 300, strength: 1 }],
+    zones: [{ id: 'still', kind: 'void', x: 1150, y: 700, radius: 330, strength: 1 }],
+    hazards: [
+      // the rim kiss: a well-struck climb off Anemo can bank off it into the cup
+      { id: 'rim', kind: 'bumper', x: 1480, y: 560, r: 22, boost: 160 },
+    ],
     fragments: [
       { x: 1150, y: 780 }, // dead center of the void, under the Bell
-      { x: 1520, y: 860 }, // low sling line under Anemo
-      { x: 760, y: 560 }, // high entry lane
+      { x: 1520, y: 900 }, // low sling line under Anemo
+      { x: 1900, y: 380 }, // the high finish line over the cup
     ],
     objectives: [{ id: 'o1', kind: 'touch', targetId: 'bell', text: 'Ring the Bell in the Still Air.' }],
     story: [
@@ -257,23 +290,28 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
-    hint: 'Dead space eats slow balls. Hit through it — hard and level.',
+    hint: 'Dead space eats slow balls, and the cup hangs high — ride Anemo\u2019s catch into a rising line, hard.',
   },
   {
     id: 'L06',
     name: 'The Tee',
     region: 1,
     concept:
-      'THE PINS TUTORIAL: the green hides deep in Umbra\u2019s shadow and the planet\u2019s own pull is not ' +
-      'enough to corner the shot. If gravity is a club, this is where you plant your own. Wow-moment: your placed ' +
-      'pin visibly finishes the bend no launch can hold.',
+      'THE PINS TUTORIAL: the green hides deep in Umbra\u2019s shadow and a dead void well smothers every ' +
+      'gravity assist short of the cup — the planet\u2019s own pull is not enough to corner the shot. If gravity ' +
+      'is a club, this is where you plant your own. Wow-moment: your placed pin visibly finishes the bend ' +
+      'no launch can hold.',
     par: 3,
     pinBudget: 2,
     tee: { x: 300, y: 720 },
     hole: { x: 1450, y: 980 },
-    bounds: { cx: 930, cy: 690, rx: 1180, ry: 600 },
+    bounds: { cx: 930, cy: 690, rx: 1480, ry: 600 },
     bodies: [
       { id: 'umbra', kind: 'attractor', x: 1200, y: 720, radius: 90, mu: 5e6, influenceR: 520, material: 'rock' },
+    ],
+    zones: [
+      // The dead well short of the green: pins are the only gravity that reaches here.
+      { id: 'well', kind: 'void', x: 1660, y: 830, radius: 190, strength: 1 },
     ],
     fragments: [
       { x: 1200, y: 400 }, // apex over Umbra
@@ -306,16 +344,17 @@ export const R1_LEVELS: LevelDef[] = [
       },
     ],
     hint:
-      'A straight line is impossible. Plant ONE pin at (1560, 620) — right of Umbra\u2019s shadow — ' +
-      'and let your pull finish the bend your launch can\u2019t.',
+      'A straight line is impossible, and the dead well kills borrowed gravity. Plant ONE pin at (1560, 620) — ' +
+      'right of Umbra\u2019s shadow — and let your pull finish the bend your launch can\u2019t.',
   },
   {
     id: 'L07',
     name: 'Binary',
     region: 1,
     concept:
-      'Two equal stars run a shared slingshot chain: Castor bends you up, Pollux bends you down, ' +
-      'and the S-curve between them is the fairway. Steal the curve, kiss a planet, live.',
+      'TWO-BODY CHAIN: Castor bends you up, Pollux bends you down, and the S-curve between them is the ' +
+      'fairway — but the saddle gate is posted: two pinball bumpers straddle the flat lane, so the honest ' +
+      'line weaves the S and steals the curve. Kiss a planet, thread the posts, live.',
     par: 3,
     pinBudget: 2,
     tee: { x: 300, y: 720 },
@@ -324,6 +363,11 @@ export const R1_LEVELS: LevelDef[] = [
     bodies: [
       { id: 'castor', kind: 'attractor', x: 1050, y: 440, radius: 60, mu: 4.5e6, influenceR: 470, material: 'rock' },
       { id: 'pollux', kind: 'attractor', x: 1550, y: 1000, radius: 60, mu: 4.5e6, influenceR: 470, material: 'rock' },
+    ],
+    hazards: [
+      // the saddle gate: two posts straddling the flat lane through the saddle
+      { id: 'post1', kind: 'bumper', x: 1290, y: 610, r: 24, boost: 220 },
+      { id: 'post2', kind: 'bumper', x: 1330, y: 770, r: 24, boost: 220 },
     ],
     fragments: [
       { x: 1050, y: 180 }, // above Castor — the committed high line
@@ -355,5 +399,6 @@ export const R1_LEVELS: LevelDef[] = [
         ],
       },
     ],
+    hint: 'Weave the saddle posts: Castor\u2019s pull lifts you over the first, Pollux\u2019s pulls you down past the second.',
   },
 ];
