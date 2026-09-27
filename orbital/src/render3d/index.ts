@@ -219,6 +219,7 @@ export class Renderer3D implements OrbitalRenderer {
   private debrisViews: THREE.Mesh[] = [];
   private pinViews: THREE.Group[] = [];
   private bumperViews: { tower: THREE.Mesh; flashRing: THREE.Mesh; x: number; y: number; r: number; flash: number }[] = [];
+  private asteroidViews: { mesh: THREE.Mesh; spin: number }[] = [];
 
   // post-processing (full tier): bloom sells every glowing landmark
   private composer: EffectComposer | null = null;
@@ -630,6 +631,7 @@ export class Renderer3D implements OrbitalRenderer {
     this.debrisViews = [];
     this.pinViews = [];
     this.bumperViews = [];
+    this.asteroidViews = [];
     this.starLayers = [];
     this.driftViews = [];
     this.beacon = null;
@@ -755,6 +757,7 @@ export class Renderer3D implements OrbitalRenderer {
     for (const wh of w.wormholes) this.addWormhole(wh);
     for (const f of w.fragments) this.addFragment(f);
     for (const d of w.debris) this.addDebris(d);
+    this.buildAsteroids(w);
 
     // --- Milo
     this.miloMesh = new THREE.Mesh(
@@ -774,8 +777,52 @@ export class Renderer3D implements OrbitalRenderer {
     this.fitCamera(w.def.bounds);
   }
 
+  /** Irregular asteroid chunk: dodecahedron with position-hashed vertex jitter
+   *  (same displacement for co-located vertices, so faces never crack). */
+  private makeAsteroid(r: number, seed: number): THREE.Mesh {
+    const geo = new THREE.DodecahedronGeometry(r, 1);
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+      const key = Math.abs(Math.round(vx * 31) + Math.round(vy * 57) * 3 + Math.round(vz * 89) * 7 + seed);
+      const j = 0.78 + ((Math.imul(key, 2654435761) >>> 16) % 1000) / 1000 * 0.5;
+      pos.setXYZ(i, vx * j, vy * j, vz * j);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: 0x5a544c, roughness: 0.96, metalness: 0.02,
+      map: bodyTexture('rock') ?? undefined, flatShading: true,
+      envMapIntensity: 0.25,
+    }));
+    mesh.castShadow = true;
+    return mesh;
+  }
+
+  /** Drifting asteroid belt beyond the bounds + a few high floaters. */
+  private buildAsteroids(w: World): void {
+    const b = w.def.bounds;
+    const seed = hashSeed(w.def.id + ':belt');
+    const n = this.quality === 'full' ? 16 : 9;
+    for (let i = 0; i < n; i++) {
+      const s2 = seed + i * 977;
+      const a = ((s2 % 360) / 360) * Math.PI * 2;
+      const rad = 1.3 + ((s2 % 7) / 7) * 0.5;
+      const r = 46 + ((s2 % 13) / 13) * 120;
+      const rock = this.makeAsteroid(r, s2);
+      const grounded = i % 3 !== 2;
+      rock.position.set(
+        b.cx + Math.cos(a) * b.rx * rad,
+        grounded ? r * 0.35 : 420 + ((s2 % 11) / 11) * 700,
+        -(b.cy + Math.sin(a) * b.ry * rad),
+      );
+      rock.rotation.set(s2 % 3, (s2 % 7) / 3, s2 % 5);
+      this.worldGroup.add(rock);
+      this.asteroidViews.push({ mesh: rock, spin: 0.03 + ((s2 % 5) / 5) * 0.08 });
+    }
+  }
+
   /** Rim displacement: the play field stays flat; beyond it the terrain rises
-   *  into layered dunes so the table sits IN a landscape, not ON a plate. */
+   *  into jagged ridged highlands — a cratered cosmic plain, not a lawn. */
   private displaceRim(ground: THREE.Mesh, b: World['def']['bounds'], seed: number): void {
     const pos = ground.geometry.getAttribute('position') as THREE.BufferAttribute;
     const playR = Math.max(b.rx, b.ry) * 1.12;
@@ -787,12 +834,14 @@ export class Renderer3D implements OrbitalRenderer {
       const edge = clamp((d - playR) / (rimR - playR), 0, 1);
       if (edge <= 0) continue;
       const e = edge * edge * (3 - 2 * edge);
-      const h =
-        Math.sin(x * 0.0021 + seed) * 34 +
-        Math.sin(y * 0.0024 + seed * 1.7) * 30 +
-        Math.sin((x + y) * 0.0013 + seed * 2.3) * 46 +
-        Math.sin(x * 0.006 + y * 0.005 + seed * 3.1) * 12;
-      pos.setZ(i, h * e + e * 26);
+      // ridged noise: folded sines give sharp mountain crests, not dunes
+      const r1 = 1 - Math.abs(Math.sin(x * 0.0015 + seed));
+      const r2 = 1 - Math.abs(Math.sin(y * 0.0018 + seed * 2.1));
+      const r3 = 1 - Math.abs(Math.sin((x + y) * 0.0011 + seed * 3.3));
+      const ridge = Math.pow(clamp(r1 * r2 * 1.4, 0, 1), 1.7) * 118
+        + Math.pow(r3, 2.2) * 52
+        + Math.sin(x * 0.006 + y * 0.005 + seed * 3.1) * 9;
+      pos.setZ(i, ridge * e + e * 30);
     }
     ground.geometry.computeVertexNormals();
   }
@@ -1013,29 +1062,23 @@ export class Renderer3D implements OrbitalRenderer {
     };
     const S = Math.max(b.rx, b.ry) / 100; // silhouette unit
     for (let i = 0; i < 9; i++) {
-      let obj: THREE.Object3D;
-      if (variant === 2) { // crystals
-        obj = new THREE.Mesh(new THREE.ConeGeometry(2.2 * S, 14 * S, 5), silhouette);
-        obj.position.y = 7 * S;
-      } else if (variant === 0) { // arches
-        obj = new THREE.Mesh(new THREE.TorusGeometry(5 * S, 0.9 * S, 6, 20, Math.PI), silhouette);
-        obj.position.y = 0;
-      } else if (variant === 1) { // wreck: tilted slab clusters
-        obj = new THREE.Mesh(new THREE.BoxGeometry(9 * S, 4.5 * S, 1.6 * S), silhouette);
-        obj.position.y = 2 * S;
-        obj.rotation.z = 0.22;
-      } else if (variant === 4) { // aurora: tall thin planes
-        obj = new THREE.Mesh(new THREE.PlaneGeometry(2.4 * S, 22 * S),
-          new THREE.MeshBasicMaterial({ color: 0x030b0a, side: THREE.DoubleSide }));
-        obj.position.y = 11 * S;
-      } else if (variant === 5) { // grid: regular low blocks
-        obj = new THREE.Mesh(new THREE.BoxGeometry(5 * S, 3.4 * S, 5 * S), silhouette);
-        obj.position.y = 1.7 * S;
-      } else { // horizon: long low wall
-        obj = new THREE.Mesh(new THREE.BoxGeometry(16 * S, 2.6 * S, 2 * S), silhouette);
-        obj.position.y = 1.3 * S;
+      // jagged asteroid formations — no architecture out here, only rock
+      const grp = new THREE.Group();
+      const pieces = 2 + (i % 2);
+      for (let p = 0; p < pieces; p++) {
+        const r = S * (2.4 + ((i * 13 + p * 7) % 10) / 5);
+        const rock = this.makeAsteroid(r, levelHash + i * 31 + p * 17);
+        const own = rock.material as THREE.Material;
+        rock.material = silhouette;
+        own.dispose();
+        rock.position.set(p * r * 0.9 - r * 0.5, r * 0.42, 0);
+        rock.scale.y = 1.4 + ((i + p) % 3) * 0.4;
+        rock.castShadow = false;
+        grp.add(rock);
       }
-      put(i, 9, obj, 1);
+      const stretch = [1.5, 0.9, 1.9, 0.75, 2.2, 1.1][variant] ?? 1;
+      grp.scale.set(1, stretch, 1);
+      put(i, 9, grp, 1);
     }
   }
 
@@ -1610,6 +1653,15 @@ export class Renderer3D implements OrbitalRenderer {
       fm.opacity = bv.flash * 0.9;
       bv.flashRing.scale.setScalar(1 + (1 - bv.flash) * 0.5);
       (bv.tower.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25 + bv.flash * 1.5;
+    }
+
+    // drift asteroids: only the floaters tumble
+    for (const av of this.asteroidViews) {
+      if (av.mesh.position.y > 200) {
+        av.mesh.rotation.y += dt * av.spin;
+        av.mesh.rotation.x += dt * av.spin * 0.4;
+        av.mesh.position.y += Math.sin(this.t * 0.4 + av.mesh.id) * 4 * dt;
+      }
     }
 
     this.updatePuffs(dt);

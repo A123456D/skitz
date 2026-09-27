@@ -70,12 +70,12 @@ export function groundAlbedo(hexTop: string, _hexBottom: string, seedStr: string
   const hTop = hsl.h;
   const sTop = Math.min(0.65, hsl.s * 1.15);
   for (let i = 0; i < S * S; i++) {
-    // dune shading in HSL: keep the theme's teal hue/saturation but give the
-    // floor a real lightness range — the raw theme colors are far too dark to
-    // survive tone mapping
+    // cratered-plain shading in HSL: keep the theme's teal hue/saturation but
+    // give the floor a real lightness range — the raw theme colors are far too
+    // dark to survive tone mapping
     const streak = f1[i] * 0.7 + f2[i] * 0.3;
     const c = new THREE.Color();
-    c.setHSL(hTop, sTop, 0.075 + streak * 0.105);
+    c.setHSL(hTop, sTop, 0.058 + streak * 0.088);
     const o = i * 4;
     img.data[o] = Math.round(c.r * 255);
     img.data[o + 1] = Math.round(c.g * 255);
@@ -83,6 +83,27 @@ export function groundAlbedo(hexTop: string, _hexBottom: string, seedStr: string
     img.data[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);
+  // impact craters: dark bowls with bright raised rims — this is a lifeless
+  // cosmic plain, not a golf course
+  let cseed = hashSeed(seedStr + 'craters');
+  const rnd = (): number => {
+    cseed = (Math.imul(cseed, 1664525) + 1013904223) >>> 0;
+    return cseed / 4294967296;
+  };
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * S;
+    const y = rnd() * S;
+    const r = 4 + rnd() * 26;
+    const bowl = g.createRadialGradient(x, y, 0, x, y, r);
+    bowl.addColorStop(0, 'rgba(1,6,5,0.5)');
+    bowl.addColorStop(0.75, 'rgba(1,6,5,0.28)');
+    bowl.addColorStop(0.92, 'rgba(180,235,220,0.16)');
+    bowl.addColorStop(1, 'rgba(180,235,220,0)');
+    g.fillStyle = bowl;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
