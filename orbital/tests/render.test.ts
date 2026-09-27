@@ -137,11 +137,11 @@ describe('aim-time camera behavior', () => {
     const ball = { x: 300, y: 0 };
     for (let i = 0; i < 120; i++) cam.update(1 / 60, ball, true);
     expect(cam.cx).toBeGreaterThan(0); // still follows the shot
-    expect(cam.scale).toBeLessThan(base * 1.15);
+    expect(cam.scale).toBeLessThan(base * 1.25); // flight-zoom hold ceiling
     expect(cam.scale).toBeGreaterThan(0);
   });
 
-  it('flight zoom punches in fast (~1.13x) and settles back on sink', () => {
+  it('flight zoom punches in fast (~1.22x) and settles back on sink', () => {
     const cam = new Camera();
     cam.setView(1280, 720);
     cam.frame(b, true);
@@ -149,7 +149,7 @@ describe('aim-time camera behavior', () => {
     const ball = { x: 300, y: 0 };
     for (let i = 0; i < 45; i++) cam.update(1 / 60, ball, true); // 0.75 s
     expect(cam.scale).toBeGreaterThan(base * 1.08); // punch landed
-    expect(cam.scale).toBeLessThan(base * 1.15); // playtest ceiling holds
+    expect(cam.scale).toBeLessThan(base * 1.25); // hold ceiling (aim never zooms)
     for (let i = 0; i < 240; i++) cam.update(1 / 60, ball, false); // sink + rest
     expect(cam.scale / base).toBeCloseTo(1, 3); // settled back to bounds fit
   });

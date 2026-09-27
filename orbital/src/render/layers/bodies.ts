@@ -242,6 +242,9 @@ export class BodiesLayer {
       v.root.x = b.cx;
       v.root.y = b.cy;
 
+      // --- dormant gating: dim, desaturate, lock glyph bobbing
+      const dormant = !b.active;
+
       // --- terminator: rotate so the baked +X light points at the region sun
       const rot = Math.atan2(this.sunY - b.cy, this.sunX - b.cx);
       v.sprite.rotation = rot;
@@ -255,8 +258,6 @@ export class BodiesLayer {
         v.shadow.alpha = dormant ? 0.18 : 0.3;
       }
 
-      // --- dormant gating: dim, desaturate, lock glyph bobbing
-      const dormant = !b.active;
       if (v.lock) {
         v.lock.visible = dormant;
         v.lock.y = -b.radius - 26 + Math.sin(this.t * 1.6 + i) * 3;
