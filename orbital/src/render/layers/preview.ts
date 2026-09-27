@@ -8,7 +8,7 @@
 
 import { Container, Graphics, Sprite } from 'pixi.js';
 import type { PredPoint } from '../../sim';
-import { clamp, mixRGB, speedRamp } from '../core';
+import { clamp, mixRGB, RAMP_SLOW } from '../core';
 import { AMBER, DANGER, GREEN_WARM, TexFactory } from '../textures';
 
 const MAX_POINTS = 160;
@@ -162,9 +162,11 @@ export class PreviewLayer {
         core.visible = halo.visible = true;
         core.x = halo.x = this.px[i];
         core.y = halo.y = this.py[i];
-        // slightly white-lifted ramp keeps the cyan/amber language but reads
-        // over both dark skies and the sun glow (halo is additive there)
-        core.tint = mixRGB(speedRamp(t01), 0xffffff, 0.12);
+        // icon-language dots: the dotted cyan gravity arc — slow cyan cooling
+        // toward mint as speed rises, white-lifted to read over every sky in
+        // the teal family (halo is additive over the sun glow)
+        const ramp = mixRGB(RAMP_SLOW, 0x9df0c8, t01);
+        core.tint = mixRGB(ramp, 0xffffff, 0.12);
         core.width = core.height = corePx * inv;
         core.alpha = 1;
         halo.tint = core.tint;

@@ -14,6 +14,11 @@ import { AMBER, DANGER, GREEN, TexFactory } from '../textures';
 
 const PAIR_COLORS = [0x7fd8e8, 0xe8a06f, 0xc9a0ff, 0x8affc1];
 
+// Icon-family accent for player-collected things (pins, fragments, placement
+// ghost): emerald, kin to the glowing cup. Warm amber stays only on
+// interactive machinery (switches/bumpers).
+const RELIC = mixRGB(GREEN, 0xffffff, 0.25);
+
 interface SwitchView {
   root: Container;
   ring: Sprite;

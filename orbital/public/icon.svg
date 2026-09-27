@@ -1,20 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="sky" cx="50%" cy="42%" r="75%">
-      <stop offset="0%" stop-color="#16304a"/>
-      <stop offset="100%" stop-color="#050810"/>
+    <radialGradient id="sky" cx="40%" cy="35%" r="90%">
+      <stop offset="0%" stop-color="#0e3a38"/>
+      <stop offset="100%" stop-color="#04100f"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8df0b0" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#8df0b0" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="url(#sky)"/>
-  <circle cx="150" cy="120" r="4" fill="#e8ecf4" opacity="0.9"/>
-  <circle cx="400" cy="90" r="3" fill="#e8ecf4" opacity="0.7"/>
-  <circle cx="430" cy="300" r="3.5" fill="#e8ecf4" opacity="0.6"/>
-  <circle cx="90" cy="330" r="3" fill="#e8ecf4" opacity="0.7"/>
-  <ellipse cx="256" cy="266" rx="150" ry="56" fill="none" stroke="#6fd6e8" stroke-width="7" transform="rotate(-18 256 266)" opacity="0.9"/>
-  <ellipse cx="256" cy="266" rx="110" ry="40" fill="none" stroke="#6fd6e8" stroke-width="4" transform="rotate(14 256 266)" opacity="0.45"/>
-  <circle cx="256" cy="266" r="52" fill="#e8ecf4"/>
-  <circle cx="238" cy="250" r="6" fill="#050810" opacity="0.16"/>
-  <path d="M330 210 L330 156 L366 170 L330 184" fill="#ffb347" stroke="#ffb347" stroke-width="6" stroke-linejoin="round"/>
-  <line x1="330" y1="150" x2="330" y2="230" stroke="#ffb347" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="368" cy="230" r="16" fill="#050810" stroke="#7fe0a8" stroke-width="6"/>
+  <!-- planet limb, bottom-left, rim-lit -->
+  <circle cx="60" cy="580" r="300" fill="#061b1a"/>
+  <path d="M -140 400 A 300 300 0 0 1 260 560" fill="none" stroke="#2a6a62" stroke-width="5" opacity="0.8"/>
+  <!-- stars -->
+  <circle cx="90" cy="90" r="3.5" fill="#e8ecf4" opacity="0.9"/>
+  <circle cx="430" cy="70" r="3" fill="#e8ecf4" opacity="0.7"/>
+  <circle cx="460" cy="300" r="3" fill="#e8ecf4" opacity="0.5"/>
+  <circle cx="330" cy="440" r="2.5" fill="#e8ecf4" opacity="0.6"/>
+  <!-- gravity arc: dotted path curving from off-left into the cup -->
+  <path d="M -30 380 Q 140 150 318 240" fill="none" stroke="#7fd8e8" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 22" opacity="0.9"/>
+  <!-- the cup: glowing green ring, dark heart -->
+  <circle cx="330" cy="240" r="86" fill="url(#glow)"/>
+  <circle cx="330" cy="240" r="40" fill="#03130c"/>
+  <circle cx="330" cy="240" r="40" fill="none" stroke="#7fe0a8" stroke-width="11"/>
+  <!-- Milo on the arc, curving in -->
+  <circle cx="212" cy="196" r="27" fill="#f4f7fb"/>
+  <circle cx="204" cy="189" r="3.4" fill="#0a2020" opacity="0.5"/>
+  <circle cx="219" cy="187" r="3.4" fill="#0a2020" opacity="0.5"/>
+  <circle cx="211" cy="200" r="3.4" fill="#0a2020" opacity="0.5"/>
+  <!-- spark where the arc meets the glow -->
+  <circle cx="286" cy="222" r="5" fill="#c8f5d8" opacity="0.9"/>
 </svg>

@@ -16,7 +16,7 @@ import { REGION_PALETTES, type RegionId } from '../../levels/palettes';
 import { col, hashSeed, mixRGB, TAU } from '../core';
 import { Camera } from '../camera';
 import { TexFactory } from '../textures';
-import { worldThemeFor, themeSunPos, MOTIF_INDEX, type WorldTheme } from '../themes';
+import { worldThemeFor, themeSunPos, MOTIF_INDEX, type LimbSide, type WorldTheme } from '../themes';
 import type { Bounds } from '../camera';
 
 /** '#rrggbb' + '#rrggbb' -> blended '#rrggbb' (theme/region sky blending). */
@@ -35,7 +35,8 @@ interface DustMote {
 
 // Bands span this multiple of the bounds half-extents. 1.7 keeps every
 // authored feature inside the 1.18-margin framing plus the worst-case
-// parallax shift (~0.3 ry) while leaving no hard art edges on screen.
+// parallax shift (mid band at 0.6x camera delta) while leaving no hard art
+// edges on screen.
 const BAND_EXTENT = 1.7;
 
 /** Starfield character per archetype. */
@@ -147,14 +148,15 @@ export class BackgroundLayer {
     if (this.quality === 'full') this.buildNebula(bounds, rnd, theme);
     if (cfg.starMode === 'streaked' && this.quality === 'full') this.buildStreaks(bounds, rnd, theme);
 
-    // starfield (world-anchored, tiny parallax) — character per archetype
+    // starfield (world-anchored, tiny parallax) — character per archetype;
+    // count scaled by the theme's starDensity (sparse icon sky varies/level)
     this.stars.removeChildren();
     this.starSprites.length = 0;
     this.starPhases.length = 0;
     this.starSpds.length = 0;
     this.starBase.length = 0;
     const starTex = this.tex.dot(12);
-    let starCount = STAR_COUNT[cfg.starMode];
+    let starCount = Math.round(STAR_COUNT[cfg.starMode] * theme.starDensity);
     if (this.quality === 'lite') starCount >>= 1; // lite: half the stars
     // cluster centers for the 'clustered' mode (2 gaussian blobs off-center)
     const clusters: number[] = [];
@@ -197,8 +199,8 @@ export class BackgroundLayer {
     // so the whole depth stack reads as one world.
     this.bandFar.removeChildren().forEach((c) => c.destroy());
     this.bandMid.removeChildren().forEach((c) => c.destroy());
-    const farG = buildVariantBand(this.variant, true, bounds, hashSeed(`${levelId}|far`));
-    const midG = buildVariantBand(this.variant, false, bounds, hashSeed(`${levelId}|mid`));
+    const farG = buildVariantBand(this.variant, true, bounds, theme.limbSide, hashSeed(`${levelId}|far`));
+    const midG = buildVariantBand(this.variant, false, bounds, theme.limbSide, hashSeed(`${levelId}|mid`));
     const bandBase = mixRGB(col(theme.accentTint), col(theme.skyBottom), 0.5);
     farG.tint = mixRGB(bandBase, 0x000000, 0.35);
     midG.tint = mixRGB(bandBase, 0x000000, 0.55);
@@ -293,21 +295,21 @@ export class BackgroundLayer {
     const b = this.bounds;
     const sc = cam.scale;
 
-    // stars: near-static parallax + gentle twinkle with per-star phase AND
-    // speed variance (skip twinkle writes in lite)
+    // stars: near-static parallax (deepened for the 2.5D read) + gentle
+    // twinkle with per-star phase AND speed variance (skip twinkle in lite)
     const twinkle = this.quality === 'full';
     for (let i = 0; i < this.starSprites.length; i++) {
       const s = this.starSprites[i];
       const wx = this.starBase[i * 2];
       const wy = this.starBase[i * 2 + 1];
-      s.x = (wx - cam.cx * 0.06) * sc + cam.viewW * 0.5;
-      s.y = (wy - cam.cy * 0.06) * sc + cam.viewH * 0.5;
+      s.x = (wx - cam.cx * 0.08) * sc + cam.viewW * 0.5;
+      s.y = (wy - cam.cy * 0.08) * sc + cam.viewH * 0.5;
       if (twinkle) s.alpha = 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(this.t * this.starSpds[i] + this.starPhases[i]));
     }
 
     // sun: soft parallax (it is FAR — moves least)
     const p = this.screenPt;
-    cam.parallax(this.sunX, this.sunY, 0.1, p);
+    cam.parallax(this.sunX, this.sunY, 0.08, p);
     this.sunGlow.x = p.x;
     this.sunGlow.y = p.y;
     this.sunCore.x = p.x;
@@ -321,12 +323,13 @@ export class BackgroundLayer {
     this.sunCore.alpha = 0.95;
 
     // static deco (nebula + streaks): one transform write for the whole set
-    this.placeDeco(this.deco, 0.1, b, sc);
+    this.placeDeco(this.deco, 0.12, b, sc);
 
-    // bands: mid parallax factor; scale with view so silhouettes stay huge.
-    // Far band gets a slow render-only drift (beauty pass, ~5 px amplitude).
-    this.placeBand(this.bandFar, 0.22, b, sc, 5);
-    this.placeBand(this.bandMid, 0.45, b, sc, 0);
+    // bands: the 2.5D depth stack — far ~0.3x / mid ~0.6x of the camera delta
+    // (gameplay plays at 1x), a widened differential so pans carve real depth.
+    // Far band keeps a slow render-only drift (beauty pass, ~5 px amplitude).
+    this.placeBand(this.bandFar, 0.3, b, sc, 5);
+    this.placeBand(this.bandMid, 0.6, b, sc, 0);
 
     // dust drift; motes freeze inside void zones ("particles fall still", §3)
     for (const d of this.dust) {
@@ -353,7 +356,7 @@ export class BackgroundLayer {
       if (d.bx > b.cx + ex) d.bx -= ex * 2;
       if (d.by < b.cy - ey) d.by += ey * 2;
       if (d.by > b.cy + ey) d.by -= ey * 2;
-      cam.parallax(d.bx, d.by, 0.55, p);
+      cam.parallax(d.bx, d.by, 0.65, p);
       d.sp.x = p.x;
       d.sp.y = p.y;
     }
@@ -411,7 +414,7 @@ function bandRng(seed: number): () => number {
  * parent tint applies palette color. `seed` jitters layout ~10% per level so
  * two levels sharing an archetype still place their motifs differently.
  */
-function buildVariantBand(variant: number, far: boolean, b: Bounds, seed: number): Graphics {
+function buildVariantBand(variant: number, far: boolean, b: Bounds, limb: LimbSide, seed: number): Graphics {
   const g = new Graphics();
   const W = b.rx * BAND_EXTENT;
   const H = b.ry * BAND_EXTENT;
@@ -524,20 +527,24 @@ function buildVariantBand(variant: number, far: boolean, b: Bounds, seed: number
       break;
     }
     case 3: {
-      // PLANET HORIZON — a colossal limb rising from the bottom with a lit
-      // atmosphere arc above it, plus a small moon; the sun slides low.
+      // PLANET HORIZON — a colossal rim-lit limb (the icon's planet) with a
+      // lit atmosphere arc, plus a small moon. The theme's limbSide decides
+      // which edge of the world it rises from.
       const R = (far ? H * 2.6 : H * 1.7) * jit();
-      const cx = W * (far ? -0.15 : 0.12) * jit();
-      const cy = H + R * 0.78; // mostly below the frame: a horizon, not a ball
+      const top = limb === 'top-back';
+      const cx = top ? W * 0.1 * jit() : W * (limb === 'bottom-right' ? 0.28 : -0.18) * jit();
+      const cy = top ? -H - R * 0.74 : H + R * 0.78; // mostly off-frame: a horizon, not a ball
       g.circle(cx, cy, R);
       fill(far ? 0.5 : 0.85);
-      // atmosphere: concentric strokes hugging the limb
+      // atmosphere: concentric strokes hugging the limb (facing into the frame)
+      const a0 = top ? Math.PI * 0.18 : Math.PI * 1.18;
+      const a1 = top ? Math.PI * 0.82 : Math.PI * 1.82;
       for (let i = 1; i <= 3; i++) {
-        g.arc(cx, cy, R + i * (far ? 14 : 22), Math.PI * 1.18, Math.PI * 1.82);
+        g.arc(cx, cy, R + i * (far ? 14 : 22), a0, a1);
         stroke(far ? 2.5 + i : 3.5 + i, 0.34 - i * 0.08);
       }
       if (far) {
-        g.circle(W * 0.55, -H * 0.45, H * 0.05 * jit());
+        g.circle(W * 0.55, top ? H * 0.4 : -H * 0.45, H * 0.05 * jit());
         fill(0.6);
       }
       break;

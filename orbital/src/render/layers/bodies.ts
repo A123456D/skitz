@@ -1,6 +1,8 @@
 // layers/bodies.ts — gravity sources. Each material gets a distinct silhouette
 // and surface recipe (baked in textures.ts); this layer owns:
 //   - terminator orientation (sprite rotated so baked light faces the region sun)
+//   - 2.5D depth: atmosphere halo ring per body + elliptical drop shadow
+//     offset away from the key light
 //   - influence rings that wake only while the ball is inside
 //   - field drift particles whose DIRECTION reads the force (in = attractor,
 //     out = repulsor) — gravity drawn honestly (§9 VFX)
@@ -17,6 +19,8 @@ const BASE_TINT = 0xffffff;
 interface BodyView {
   root: Container;
   sprite: Sprite;
+  shadow: Sprite | null; // soft elliptical drop shadow on the plane (2.5D)
+  atmo: Sprite | null;   // atmosphere halo ring hugging the limb
   ring: Sprite;          // influence radius (dashed)
   spiky: Sprite | null;  // repulsor identity ring
   lock: Sprite | null;   // dormant glyph (gated + inactive)
@@ -50,7 +54,7 @@ export class BodiesLayer {
 
   constructor(private tex: TexFactory) {}
 
-  build(w: World, sunX: number, sunY: number): void {
+  build(w: World, sunX: number, sunY: number, atmoColor = 0x4fd8a8): void {
     this.sunX = sunX;
     this.sunY = sunY;
     for (const v of this.views) v.root.destroy({ children: true });
@@ -67,6 +71,8 @@ export class BodiesLayer {
       const view: BodyView = {
         root,
         sprite: new Sprite(),
+        shadow: null,
+        atmo: null,
         ring: new Sprite(),
         spiky: null,
         lock: null,
@@ -98,6 +104,29 @@ export class BodiesLayer {
         view.sprite.anchor.set(0.5);
         view.sprite.scale.set(view.baseScale);
         root.addChild(view.sprite);
+
+        // 2.5D: soft elliptical drop shadow on the plane, offset AWAY from the
+        // key light each frame (update()); alpha ~0.3 keeps it a whisper
+        const shadow = new Sprite(this.tex.glow(64));
+        shadow.anchor.set(0.5);
+        shadow.tint = 0x02100e; // near-black teal — shadow belongs to the world
+        shadow.alpha = 0.3;
+        shadow.width = b.radius * 2.6;
+        shadow.height = b.radius * 1.25;
+        root.addChildAt(shadow, 0);
+        view.shadow = shadow;
+
+        // 2.5D: atmosphere halo — a thin glowing ring of air hugging the limb
+        // (the icon's rim-lit read), tinted by the level's accent
+        const atmo = new Sprite(this.tex.ringGlow(256));
+        atmo.anchor.set(0.5);
+        atmo.blendMode = 'add';
+        atmo.tint = atmoColor;
+        atmo.alpha = 0.2;
+        const asz = (b.radius * 2.35) / 256; // ring peak sits just past the edge
+        atmo.scale.set(asz);
+        root.addChildAt(atmo, 0);
+        view.atmo = atmo;
 
         // unstable bodies get an additive surge aura
         if (b.kind === 'unstable') {
@@ -214,7 +243,17 @@ export class BodiesLayer {
       v.root.y = b.cy;
 
       // --- terminator: rotate so the baked +X light points at the region sun
-      v.sprite.rotation = Math.atan2(this.sunY - b.cy, this.sunX - b.cx);
+      const rot = Math.atan2(this.sunY - b.cy, this.sunX - b.cx);
+      v.sprite.rotation = rot;
+
+      // --- drop shadow: slide on the plane away from the key light (the
+      // light direction rotates the sprite; the shadow offsets opposite it)
+      if (v.shadow) {
+        const off = b.radius * 0.42 + 8;
+        v.shadow.x = -Math.cos(rot) * off;
+        v.shadow.y = -Math.sin(rot) * off;
+        v.shadow.alpha = dormant ? 0.18 : 0.3;
+      }
 
       // --- dormant gating: dim, desaturate, lock glyph bobbing
       const dormant = !b.active;

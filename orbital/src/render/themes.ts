@@ -1,21 +1,24 @@
-// themes.ts — per-level WORLD THEMES (one unique world per level, L01..L24).
+// themes.ts — per-level WORLD THEMES: 24 variations of THE ICON IDENTITY.
+//
+// ORBITAL's look is the app icon (public/icon.svg): a deep teal-emerald space
+// (#0e3a38 -> #04100f), a rim-lit planet limb, a glowing green cup, a dotted
+// cyan gravity arc, sparse stars, thin elegant lines. Every level is THAT
+// world — variation lives INSIDE the family, never outside it:
+//   - sky gradient slides across teal <-> deep-emerald <-> ice-mint
+//   - nebula tints stay in the green/teal/cyan family
+//   - star density, key-light placement, limb side and silhouette motif vary
+// There are no crimson/magenta/gold worlds any more — ORBITAL is THE teal game.
+// (Warm accents live only in gameplay language: amber interactivity, red
+// danger, and the cup's green bloom, which stays the brightest landmark.)
 //
 // Pure TS: no Pixi, no DOM — unit-testable headless (see tests/render.test.ts).
-// The background layer consumes a theme for the whole scene grade: sky gradient,
-// key-light sun color + placement, nebula hues/alpha, silhouette motif + tints,
-// star and dust tinting. Region palettes (../levels/palettes.ts) survive only
-// as a faint ~10% base influence blended into the sky so the four regions keep
-// a whisper of continuity.
 //
 // Curation rules (enforced by tests):
-//  - No two ADJACENT levels share a hue family (deep teal, ember, violet, jade,
-//    ice-blue, gold, crimson, aurora green, magenta, slate, champagne, cobalt,
-//    burnt orange, rose, petrol, copper, indigo, lime, coral, steel, plum,
-//    sage, aqua, wine).
-//  - No two ADJACENT levels share a silhouette motif (the 6 archetypes).
-//  - nebulaAlpha stays inside 0.25..0.4 — brighter than the old <=0.18 wash but
-//    still far below the lit green pad, which remains the brightest warm
-//    landmark on every level.
+//  - Every `family` is a distinct sub-family of the identity (24 unique names)
+//    so no two levels read identical; adjacent levels additionally never share
+//    a family or a silhouette motif.
+//  - nebulaAlpha stays inside 0.25..0.4 — atmospheric, but still far below the
+//    lit green pad, which remains the brightest landmark on every level.
 //  - Unknown ids resolve through an FNV hash into the curated table, so any
 //    bonus/test level still gets a stable, valid world.
 
@@ -42,60 +45,69 @@ export const MOTIF_INDEX: Readonly<Record<WorldMotif, number>> = {
   grid: 5,
 };
 
+/** Where the big rim-lit planet limb sits (the icon's bottom-left limb). */
+export type LimbSide = 'bottom-left' | 'bottom-right' | 'top-back';
+
+export const LIMB_SIDES: readonly LimbSide[] = ['bottom-left', 'bottom-right', 'top-back'];
+
 export interface WorldTheme {
   /** Flavor name (screenshots, debug overlay). */
   name: string;
-  /** Curated hue family — adjacency uniqueness is asserted on this. */
+  /** Identity sub-family — uniqueness across all 24 levels is asserted. */
   family: string;
-  /** Sky gradient, top -> bottom (canvas hex strings). */
+  /** Sky gradient, top -> bottom (canvas hex strings, always dark space). */
   skyTop: string;
   skyBottom: string;
-  /** Key-light color: sun glow/core tint AND the scene's warm wash. */
+  /** Key-light color: pale mint-ice sun glow/core tint AND the scene wash. */
   sunColor: string;
   /** Where the key light sits (drives baked body terminators via themeSunPos). */
   sunSide: SunSide;
-  /** 2-3 nebula hues, cycled across the additive fog blobs. */
+  /** 2-3 nebula hues (green/teal/cyan family), cycled across the fog blobs. */
   nebulaColors: readonly string[];
   /** Nebula blob alpha band, 0.25..0.4 (readability cap, see header). */
   nebulaAlpha: number;
   /** Which of the 6 silhouette archetypes this world shows. */
   silhouetteMotif: WorldMotif;
+  /** Where the rim-lit planet limb of this world sits. */
+  limbSide: LimbSide;
+  /** Starfield density multiplier (sparse icon sky: ~0.65..1.3). */
+  starDensity: number;
   /** Ambient dust mote tint. */
   dustColor: string;
-  /** World accent: star tint, silhouette hue base, UI-adjacent glow. */
+  /** World accent: star tint, silhouette hue base, atmosphere-halo tint. */
   accentTint: string;
 }
 
 /**
- * The 24 curated worlds. Hue families rotate so neighbors always contrast;
- * motifs walk all 6 archetypes with no adjacent repeats (L17/L18 deliberately
- * break the 6-cycle to keep families + motifs both de-collided).
+ * The 24 curated worlds — one icon identity, 24 weathers. Motifs walk all 6
+ * archetypes with no adjacent repeats; families are all distinct so every
+ * level still reads as its own place inside the teal universe.
  */
 export const THEMES: Readonly<Record<string, WorldTheme>> = {
-  L01: { name: 'Teal Reach',      family: 'deep teal',    skyTop: '#04222b', skyBottom: '#0e4d55', sunColor: '#c8fff2', sunSide: 'right', nebulaColors: ['#0f6e6e', '#1fae9e'],                 nebulaAlpha: 0.3,  silhouetteMotif: 'arches',   dustColor: '#9fe8de', accentTint: '#5fe8d0' },
-  L02: { name: 'Ember Yard',      family: 'ember',        skyTop: '#1c0a08', skyBottom: '#5c2412', sunColor: '#ffb36b', sunSide: 'low',   nebulaColors: ['#a83a18', '#ff7a33', '#d94f2a'],      nebulaAlpha: 0.34, silhouetteMotif: 'wreck',    dustColor: '#e8a684', accentTint: '#ff9e5e' },
-  L03: { name: 'Violet Deep',     family: 'violet',       skyTop: '#140b26', skyBottom: '#3a2368', sunColor: '#e8d9ff', sunSide: 'high',  nebulaColors: ['#6a3ad9', '#9a5fff'],                 nebulaAlpha: 0.32, silhouetteMotif: 'crystals', dustColor: '#c9b4f5', accentTint: '#b98fff' },
-  L04: { name: 'Jade Hollow',     family: 'jade',         skyTop: '#07200f', skyBottom: '#0f4d38', sunColor: '#d6ffe0', sunSide: 'left',  nebulaColors: ['#1f7a4d', '#3fae76'],                 nebulaAlpha: 0.28, silhouetteMotif: 'horizon',  dustColor: '#a8e8c0', accentTint: '#58e8a0' },
-  L05: { name: 'Ice Drift',       family: 'ice-blue',     skyTop: '#061626', skyBottom: '#16466b', sunColor: '#dff2ff', sunSide: 'right', nebulaColors: ['#3f8fd9', '#7fc4f0'],                 nebulaAlpha: 0.3,  silhouetteMotif: 'aurora',   dustColor: '#c4e4fa', accentTint: '#8fd0ff' },
-  L06: { name: 'Gold Meridian',   family: 'gold',         skyTop: '#241604', skyBottom: '#6b4a10', sunColor: '#ffe9a8', sunSide: 'low',   nebulaColors: ['#d9a021', '#ffd24f'],                 nebulaAlpha: 0.35, silhouetteMotif: 'grid',     dustColor: '#f0dca0', accentTint: '#ffd76b' },
-  L07: { name: 'Crimson Shelf',   family: 'crimson',      skyTop: '#20050c', skyBottom: '#6b1024', sunColor: '#ffb8b0', sunSide: 'high',  nebulaColors: ['#c41e3e', '#ff4d6a'],                 nebulaAlpha: 0.34, silhouetteMotif: 'arches',   dustColor: '#f0aab2', accentTint: '#ff6b85' },
-  L08: { name: 'Aurora Veil',     family: 'aurora green', skyTop: '#031a12', skyBottom: '#0d4d3f', sunColor: '#c4ffdd', sunSide: 'left',  nebulaColors: ['#17c888', '#66ffb8', '#2ad9a8'],      nebulaAlpha: 0.3,  silhouetteMotif: 'wreck',    dustColor: '#a0f0cc', accentTint: '#4dffb0' },
-  L09: { name: 'Magenta Bloom',   family: 'magenta',      skyTop: '#20041c', skyBottom: '#6b1257', sunColor: '#ffb8ec', sunSide: 'right', nebulaColors: ['#d92a9e', '#ff6bc4'],                 nebulaAlpha: 0.33, silhouetteMotif: 'crystals', dustColor: '#f0b4e0', accentTint: '#ff85d0' },
-  L10: { name: 'Slate Quiet',     family: 'slate',        skyTop: '#12161c', skyBottom: '#39434f', sunColor: '#e8eef2', sunSide: 'high',  nebulaColors: ['#5f7186', '#8fa4b8'],                 nebulaAlpha: 0.26, silhouetteMotif: 'horizon',  dustColor: '#c0ccd6', accentTint: '#a8bccb' },
-  L11: { name: 'Champagne Rise',  family: 'champagne',    skyTop: '#1e1710', skyBottom: '#5c4a30', sunColor: '#fff0d0', sunSide: 'low',   nebulaColors: ['#c4a878', '#e8d0a8'],                 nebulaAlpha: 0.29, silhouetteMotif: 'aurora',   dustColor: '#e8dcc0', accentTint: '#f0dcb0' },
-  L12: { name: 'Cobalt Expanse',  family: 'cobalt',       skyTop: '#050c22', skyBottom: '#14306b', sunColor: '#d0e0ff', sunSide: 'right', nebulaColors: ['#2450d9', '#5f8aff'],                 nebulaAlpha: 0.32, silhouetteMotif: 'grid',     dustColor: '#a8bcf0', accentTint: '#6b93ff' },
-  L13: { name: 'Burnt Orbit',     family: 'burnt orange', skyTop: '#1e0e04', skyBottom: '#66300f', sunColor: '#ffc890', sunSide: 'high',  nebulaColors: ['#c4601e', '#ff9040'],                 nebulaAlpha: 0.35, silhouetteMotif: 'arches',   dustColor: '#f0c0a0', accentTint: '#ffa860' },
-  L14: { name: 'Rose Span',       family: 'rose',         skyTop: '#1f0a10', skyBottom: '#63283c', sunColor: '#ffd8dc', sunSide: 'left',  nebulaColors: ['#c4546e', '#ff8fa5'],                 nebulaAlpha: 0.3,  silhouetteMotif: 'wreck',    dustColor: '#f0c4cc', accentTint: '#ff9fb0' },
-  L15: { name: 'Petrol Trench',   family: 'petrol',       skyTop: '#04181e', skyBottom: '#0d3d4d', sunColor: '#bfe8e0', sunSide: 'right', nebulaColors: ['#0e5f70', '#2a9db0'],                 nebulaAlpha: 0.29, silhouetteMotif: 'crystals', dustColor: '#9ccfdc', accentTint: '#4fc4d6' },
-  L16: { name: 'Copper Wastes',   family: 'copper',       skyTop: '#190d06', skyBottom: '#57301a', sunColor: '#ffcf9e', sunSide: 'low',   nebulaColors: ['#a85f2e', '#d98a4f'],                 nebulaAlpha: 0.34, silhouetteMotif: 'horizon',  dustColor: '#e8bfa0', accentTint: '#e8a070' },
-  L17: { name: 'Indigo Vault',    family: 'indigo',       skyTop: '#080a1e', skyBottom: '#232a66', sunColor: '#cdd4ff', sunSide: 'high',  nebulaColors: ['#4050c0', '#7a88e8'],                 nebulaAlpha: 0.31, silhouetteMotif: 'grid',     dustColor: '#b0b8ea', accentTint: '#8894f0' },
-  L18: { name: 'Lime Terrace',    family: 'lime',         skyTop: '#101c04', skyBottom: '#3d5c14', sunColor: '#eaffc4', sunSide: 'left',  nebulaColors: ['#7aa81e', '#a8d94a'],                 nebulaAlpha: 0.28, silhouetteMotif: 'arches',   dustColor: '#d2ecb0', accentTint: '#bce85f' },
-  L19: { name: 'Coral Fields',    family: 'coral',        skyTop: '#1e0b0a', skyBottom: '#66302c', sunColor: '#ffd4c4', sunSide: 'right', nebulaColors: ['#d96050', '#ff9a80'],                 nebulaAlpha: 0.33, silhouetteMotif: 'aurora',   dustColor: '#f0c4b8', accentTint: '#ffa890' },
-  L20: { name: 'Steel Silence',   family: 'steel',        skyTop: '#0e1218', skyBottom: '#2f3d4d', sunColor: '#e0ecf5', sunSide: 'high',  nebulaColors: ['#54708c', '#86a4bd'],                 nebulaAlpha: 0.26, silhouetteMotif: 'wreck',    dustColor: '#bccbd9', accentTint: '#9db8cf' },
-  L21: { name: 'Plum Mirage',     family: 'plum',         skyTop: '#190717', skyBottom: '#52264a', sunColor: '#f2cfe8', sunSide: 'low',   nebulaColors: ['#8c3a78', '#c46aab'],                 nebulaAlpha: 0.32, silhouetteMotif: 'horizon',  dustColor: '#e0b4d4', accentTint: '#d98cc0' },
-  L22: { name: 'Sage Rim',        family: 'sage',         skyTop: '#0f1610', skyBottom: '#364938', sunColor: '#e2eed9', sunSide: 'left',  nebulaColors: ['#5f7d58', '#93b58a'],                 nebulaAlpha: 0.27, silhouetteMotif: 'crystals', dustColor: '#c2d4ba', accentTint: '#a8c99a' },
-  L23: { name: 'Aqua Circuit',    family: 'aqua',         skyTop: '#041a20', skyBottom: '#0f4a5c', sunColor: '#c8f2ff', sunSide: 'right', nebulaColors: ['#1690b0', '#4fd0e8'],                 nebulaAlpha: 0.3,  silhouetteMotif: 'grid',     dustColor: '#a6e2ef', accentTint: '#5fdcec' },
-  L24: { name: 'Wine Crown',      family: 'wine',         skyTop: '#1c060f', skyBottom: '#5a122e', sunColor: '#f2c4d0', sunSide: 'high',  nebulaColors: ['#a02048', '#d94f78'],                 nebulaAlpha: 0.34, silhouetteMotif: 'aurora',   dustColor: '#e8b4c2', accentTint: '#e87394' },
+  L01: { name: 'Teal Reach',      family: 'abyssal teal',   skyTop: '#04222a', skyBottom: '#0e4a4c', sunColor: '#d8fff2', sunSide: 'right', nebulaColors: ['#0f6e66', '#1fae9a'],                 nebulaAlpha: 0.30, silhouetteMotif: 'arches',   limbSide: 'bottom-left',  starDensity: 1.0,  dustColor: '#9fe8de', accentTint: '#5fe8d0' },
+  L02: { name: 'Verdant Yard',    family: 'jade mist',      skyTop: '#04160f', skyBottom: '#0d4534', sunColor: '#d2f8e4', sunSide: 'low',   nebulaColors: ['#1f8a5e', '#35c890'],                 nebulaAlpha: 0.30, silhouetteMotif: 'wreck',    limbSide: 'bottom-right', starDensity: 0.9,  dustColor: '#a8e8c8', accentTint: '#62e8a8' },
+  L03: { name: 'Mint Deep',       family: 'glacial mint',   skyTop: '#05242a', skyBottom: '#14545c', sunColor: '#c8f8f4', sunSide: 'high',  nebulaColors: ['#1f8ea0', '#4fd0d8'],                 nebulaAlpha: 0.28, silhouetteMotif: 'crystals', limbSide: 'top-back',     starDensity: 0.7,  dustColor: '#b0ecf0', accentTint: '#6fe4dc' },
+  L04: { name: 'Jade Hollow',     family: 'deep emerald',   skyTop: '#03180e', skyBottom: '#0c4430', sunColor: '#d6ffe4', sunSide: 'left',  nebulaColors: ['#177a50', '#2fb888'],                 nebulaAlpha: 0.28, silhouetteMotif: 'horizon',  limbSide: 'bottom-left',  starDensity: 1.15, dustColor: '#a0e8c4', accentTint: '#58e8a0' },
+  L05: { name: 'Ice Drift',       family: 'lagoon cyan',    skyTop: '#042028', skyBottom: '#104c5e', sunColor: '#d8f4ff', sunSide: 'right', nebulaColors: ['#1f8fa8', '#4fc4d8'],                 nebulaAlpha: 0.30, silhouetteMotif: 'aurora',   limbSide: 'bottom-right', starDensity: 1.05, dustColor: '#b4e8f2', accentTint: '#6fd8e8' },
+  L06: { name: 'Seafoam Rise',    family: 'seafoam',        skyTop: '#051d18', skyBottom: '#114a3e', sunColor: '#dcfbe8', sunSide: 'low',   nebulaColors: ['#239878', '#48d8a8'],                 nebulaAlpha: 0.32, silhouetteMotif: 'grid',     limbSide: 'top-back',     starDensity: 0.85, dustColor: '#b8f0d8', accentTint: '#78ecb4' },
+  L07: { name: 'Emerald Shelf',   family: 'verdigris',      skyTop: '#031511', skyBottom: '#0b3d34', sunColor: '#d0f8e8', sunSide: 'high',  nebulaColors: ['#128268', '#2ab894'],                 nebulaAlpha: 0.30, silhouetteMotif: 'arches',   limbSide: 'bottom-left',  starDensity: 1.2,  dustColor: '#9ce4d0', accentTint: '#52e0b0' },
+  L08: { name: 'Aurora Veil',     family: 'ice teal',       skyTop: '#04191c', skyBottom: '#0d4a48', sunColor: '#d4fff4', sunSide: 'left',  nebulaColors: ['#17c888', '#66ffb8', '#2ad9a8'],      nebulaAlpha: 0.30, silhouetteMotif: 'wreck',    limbSide: 'bottom-right', starDensity: 0.8,  dustColor: '#a0f0d4', accentTint: '#4dffb0' },
+  L09: { name: 'Reef Bloom',      family: 'moss jade',      skyTop: '#041a14', skyBottom: '#0f4a38', sunColor: '#d8f8ec', sunSide: 'right', nebulaColors: ['#1f9870', '#3fd098'],                 nebulaAlpha: 0.31, silhouetteMotif: 'crystals', limbSide: 'top-back',     starDensity: 1.1,  dustColor: '#ace8d0', accentTint: '#5ae8a8' },
+  L10: { name: 'Quiet Teal',      family: 'emerald night',  skyTop: '#041318', skyBottom: '#0a3644', sunColor: '#d2f2ea', sunSide: 'high',  nebulaColors: ['#10606a', '#2a9a94'],                 nebulaAlpha: 0.27, silhouetteMotif: 'horizon',  limbSide: 'bottom-right', starDensity: 0.75, dustColor: '#9cdcd8', accentTint: '#4fc8c0' },
+  L11: { name: 'Tidal Terrace',   family: 'petrol teal',    skyTop: '#042024', skyBottom: '#0f4a52', sunColor: '#d4f6f0', sunSide: 'low',   nebulaColors: ['#0e7280', '#2aa8b0'],                 nebulaAlpha: 0.29, silhouetteMotif: 'aurora',   limbSide: 'bottom-left',  starDensity: 0.9,  dustColor: '#a2e4e2', accentTint: '#52d4d0' },
+  L12: { name: 'Mint Expanse',    family: 'mint aurora',    skyTop: '#06262c', skyBottom: '#175a60', sunColor: '#e0fcf4', sunSide: 'right', nebulaColors: ['#35c8a0', '#7ae8c8'],                 nebulaAlpha: 0.33, silhouetteMotif: 'grid',     limbSide: 'top-back',     starDensity: 1.25, dustColor: '#c0f2e0', accentTint: '#8df0c8' },
+  L13: { name: 'Deep Bough',      family: 'pine shadow',    skyTop: '#03140e', skyBottom: '#0a3828', sunColor: '#d0f6e2', sunSide: 'high',  nebulaColors: ['#116448', '#24a080'],                 nebulaAlpha: 0.28, silhouetteMotif: 'arches',   limbSide: 'bottom-left',  starDensity: 1.0,  dustColor: '#98e0c8', accentTint: '#4ad898' },
+  L14: { name: 'Glass Span',      family: 'reef cyan',      skyTop: '#041e24', skyBottom: '#0f4654', sunColor: '#d6f2fa', sunSide: 'left',  nebulaColors: ['#1a8a9e', '#3abcc8'],                 nebulaAlpha: 0.30, silhouetteMotif: 'wreck',    limbSide: 'bottom-right', starDensity: 0.85, dustColor: '#aae6ee', accentTint: '#5cd4dc' },
+  L15: { name: 'Petrol Trench',   family: 'malachite',      skyTop: '#03181a', skyBottom: '#0c4244', sunColor: '#ceeae4', sunSide: 'right', nebulaColors: ['#0e5f58', '#229a8c'],                 nebulaAlpha: 0.29, silhouetteMotif: 'crystals', limbSide: 'top-back',     starDensity: 1.05, dustColor: '#96dcd2', accentTint: '#46c8b4' },
+  L16: { name: 'Horizon Crown',   family: 'arctic jade',    skyTop: '#051d22', skyBottom: '#124e50', sunColor: '#e2f8f0', sunSide: 'low',   nebulaColors: ['#1f9080', '#48c8b0'],                 nebulaAlpha: 0.32, silhouetteMotif: 'horizon',  limbSide: 'top-back',     starDensity: 1.2,  dustColor: '#b4eee0', accentTint: '#6ce4cc' },
+  L17: { name: 'Vault of Pines',  family: 'serpentine',     skyTop: '#041710', skyBottom: '#0d402a', sunColor: '#d4f6e0', sunSide: 'high',  nebulaColors: ['#177052', '#30b090'],                 nebulaAlpha: 0.29, silhouetteMotif: 'grid',     limbSide: 'bottom-left',  starDensity: 0.7,  dustColor: '#a4e8cc', accentTint: '#5ce0a8' },
+  L18: { name: 'Jade Terrace',    family: 'harbor teal',    skyTop: '#041c20', skyBottom: '#0e4850', sunColor: '#d8f6ee', sunSide: 'left',  nebulaColors: ['#158878', '#32b8a4'],                 nebulaAlpha: 0.28, silhouetteMotif: 'arches',   limbSide: 'bottom-right', starDensity: 1.1,  dustColor: '#a4e8dc', accentTint: '#56e0c4' },
+  L19: { name: 'Celadon Fields',  family: 'celadon mist',   skyTop: '#052226', skyBottom: '#155058', sunColor: '#defcf4', sunSide: 'right', nebulaColors: ['#2aa890', '#68e0c0'],                 nebulaAlpha: 0.31, silhouetteMotif: 'aurora',   limbSide: 'top-back',     starDensity: 1.3,  dustColor: '#baf0e0', accentTint: '#7ae8cc' },
+  L20: { name: 'Deepwater Still', family: 'abyss green',    skyTop: '#030f12', skyBottom: '#093038', sunColor: '#ceeae6', sunSide: 'high',  nebulaColors: ['#0d5860', '#22908c'],                 nebulaAlpha: 0.26, silhouetteMotif: 'wreck',    limbSide: 'bottom-left',  starDensity: 0.65, dustColor: '#92dcd8', accentTint: '#44c4bc' },
+  L21: { name: 'Mirage Pines',    family: 'frost cyan',     skyTop: '#042026', skyBottom: '#0f4a56', sunColor: '#d8f4f8', sunSide: 'low',   nebulaColors: ['#1f92a4', '#48ccd4'],                 nebulaAlpha: 0.30, silhouetteMotif: 'horizon',  limbSide: 'bottom-left',  starDensity: 1.0,  dustColor: '#a6e6ea', accentTint: '#58d8dc' },
+  L22: { name: 'Tidal Emerald',   family: 'chrysolite',     skyTop: '#041a12', skyBottom: '#0e4632', sunColor: '#d6f8e6', sunSide: 'left',  nebulaColors: ['#1a8a5e', '#38c890'],                 nebulaAlpha: 0.29, silhouetteMotif: 'crystals', limbSide: 'bottom-right', starDensity: 1.15, dustColor: '#a6ecd0', accentTint: '#60e8ac' },
+  L23: { name: 'Aqua Circuit',    family: 'boreal teal',    skyTop: '#04242a', skyBottom: '#13565e', sunColor: '#d6f6fa', sunSide: 'right', nebulaColors: ['#1690a4', '#4fd0dc'],                 nebulaAlpha: 0.30, silhouetteMotif: 'grid',     limbSide: 'bottom-left',  starDensity: 0.95, dustColor: '#a6e6ef', accentTint: '#5fdcec' },
+  L24: { name: 'Evergreen Crown', family: 'dark chrysolite', skyTop: '#031510', skyBottom: '#0b3e2c', sunColor: '#d2f6e4', sunSide: 'high', nebulaColors: ['#127050', '#28b48c'],                 nebulaAlpha: 0.31, silhouetteMotif: 'aurora',   limbSide: 'top-back',     starDensity: 0.8,  dustColor: '#9ee6cc', accentTint: '#4ee8a0' },
 };
 
 export const THEME_COUNT = Object.keys(THEMES).length;

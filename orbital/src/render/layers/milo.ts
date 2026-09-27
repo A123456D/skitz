@@ -1,8 +1,8 @@
 // layers/milo.ts — the character rig. Procedural: white ball + two seam arcs +
 // three dimples (the glyph) + brow-line eyes. Owns expression moods, blink,
 // squash & stretch (launch/impact), aim anticipation, the orbit trail ribbon
-// (pooled, colored by the slow-cyan -> fast-amber speed ramp), and spin driven
-// by w.ball.spin.
+// (pooled, colored by the slow-cyan -> fast-amber speed ramp), spin driven
+// by w.ball.spin, and the 2.5D contact shadow (proximity-driven).
 //
 // Face does NOT rotate with spin (character reads at all times); body detail
 // (seams/dimples) does — that contrast is what sells "ball with a soul".
@@ -88,6 +88,11 @@ export class MiloLayer {
   private ghost!: Sprite;
   private ghostA = 0;
 
+  // --- 2.5D contact shadow: an ellipse that slides toward the nearest body
+  // surface, tightening/brightening as Milo closes in, fading in deep space
+  private shadow!: Sprite;
+  private shadowA = 0;
+
   constructor(tex: TexFactory) {
     this.tf = tex;
     this.textures = miloTextures(tex);
@@ -140,6 +145,13 @@ export class MiloLayer {
       this.trail.push(sp);
     }
 
+    // contact shadow (under everything in the rig)
+    this.shadow = new Sprite(this.tf.glow(64));
+    this.shadow.anchor.set(0.5);
+    this.shadow.tint = 0x02100e; // near-black teal, matches body drop shadows
+    this.shadow.alpha = 0;
+    this.trailLayer.addChildAt(this.shadow, 0);
+
     // motion-blur ghost: ONE pooled body sprite, stretched along velocity
     this.ghost = new Sprite(tx.body);
     this.ghost.anchor.set(0.5);
@@ -167,6 +179,8 @@ export class MiloLayer {
     this.flarePending = false;
     this.ghostA = 0;
     this.ghost.visible = false;
+    this.shadowA = 0;
+    this.shadow.alpha = 0;
     for (const sp of this.trail) sp.alpha = 0;
   }
 
@@ -259,6 +273,9 @@ export class MiloLayer {
       this.ghostA = expDamp(this.ghostA, 0, 8, dt);
       this.ghost.visible = this.ghostA > 0.02;
       this.ghost.alpha = this.ghostA;
+      this.shadowA = expDamp(this.shadowA, 0, 8, dt);
+      this.shadow.visible = this.shadowA > 0.02;
+      this.shadow.alpha = this.shadowA;
       if (this.root.alpha < 0.02) this.root.visible = false;
       return;
     }
@@ -335,6 +352,34 @@ export class MiloLayer {
       this.gravVel += acc * dt;
       this.gravStretch += this.gravVel * dt;
     }
+
+    // --- 2.5D contact shadow: slides toward the near body surface along the
+    // eased pull axis (gravAng), tightening + brightening as gStr -> 1; a soft
+    // ambient pool when resting; gone in deep space. Zero allocation.
+    let sTgtA: number;
+    let sAng = Math.PI / 2; // resting: shadow pools directly beneath
+    let sDist = VIS_R * 1.2;
+    let sScl = 1;
+    if (b.flying) {
+      if (gStr > 0.02) {
+        sTgtA = 0.1 + 0.45 * gStr;
+        sAng = this.gravAng;
+        sDist = 4 + 14 * (1 - gStr); // converges onto the surface point
+        sScl = 1.4 - 0.55 * gStr; // tightens as he closes in
+      } else {
+        sTgtA = 0; // deep space: no ground, no shadow
+      }
+    } else {
+      sTgtA = 0.22;
+    }
+    this.shadowA = expDamp(this.shadowA, sTgtA, 10, dt);
+    this.shadow.visible = this.shadowA > 0.015;
+    this.shadow.alpha = this.shadowA;
+    this.shadow.x = b.x + Math.cos(sAng) * sDist;
+    this.shadow.y = b.y + Math.sin(sAng) * sDist;
+    const shW = VIS_R * 2.3 * zoomComp * sScl;
+    this.shadow.width = shW;
+    this.shadow.height = shW * 0.5;
 
     // --- squash & stretch (priority: impact > launch recoil > gravity > launch)
     this.stretch = expDamp(this.stretch, 0, 3.2, dt);

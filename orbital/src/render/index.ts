@@ -6,6 +6,7 @@ import { Application, Container, Sprite } from 'pixi.js';
 import type { PinGhost, MiloMood, OrbitalRenderer } from './api';
 import type { PredPoint } from '../sim';
 import type { SimEvent, World } from '../sim/types';
+import { col } from './core';
 import { Camera } from './camera';
 import { TexFactory } from './textures';
 import { BackgroundLayer, beginBackgroundFrame, reportVoids } from './layers/background';
@@ -310,8 +311,10 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.lastWorld = w;
     const b = w.def.bounds;
     // Per-level world theme: its key-light placement drives BOTH the
-    // background glow and the baked body terminators (one honest light).
-    const sun = themeSunPos(worldThemeFor(w.def.id).sunSide, b);
+    // background glow and the baked body terminators (one honest light), and
+    // its accent tints each body's atmosphere halo (teal/emerald family).
+    const theme = worldThemeFor(w.def.id);
+    const sun = themeSunPos(theme.sunSide, b);
 
     this.switchIdx.clear();
     w.switches.forEach((s, i) => this.switchIdx.set(s.def.id, i));
@@ -319,7 +322,7 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.cam.frame(b, true);
     this.bg.build(w.def.id, w.def.region, b); // theme -> per-level world grade
     this.bg.resize(this.cam.viewW, this.cam.viewH);
-    this.bodies.build(w, sun.x, sun.y);
+    this.bodies.build(w, sun.x, sun.y, col(theme.accentTint));
     this.zones.build(w);
     this.objects.build(w);
     this.milo.reset(w.def.tee.x, w.def.tee.y);

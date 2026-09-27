@@ -7,7 +7,7 @@
 //    offset stays capped so the course never unframes, on small (phone)
 //    viewports the follow is tighter and the course may partially leave the
 //    frame (cinematic). Bounds framing returns between strokes.
-//  - Flight energy: quick ~1.13x punch-in on launch easing into a relaxed
+//  - Flight energy: quick ~1.22x punch-in on launch easing into a relaxed
 //    hold, then a smooth settle back to the bounds fit on sink. Aim NEVER
 //    zooms (owner verdict) — aim/rest stay at the exact bounds framing.
 //  - Screen shake decays exponentially; offsets are bounded by magnitude.
@@ -32,14 +32,14 @@ const FOLLOW_CAP_SMALL = 0.62;  // phones stick closer to the ball mid-flight:
 const FOLLOW_DIST_LARGE = 0.28; // hard follow-distance cap fraction, desktop
 const FOLLOW_DIST_SMALL = 0.44; // phones keep following further out
 
-// Flight zoom energy: a quick punch-in (~1.13x, tuned just under the 1.15x
-// playtest ceiling) while the ball flies, then a relaxed hold; on sink/settle
-// it eases back to the bounds framing. Aim never zooms (owner verdict).
-const FLIGHT_ZOOM = 1.13;      // hold zoom multiplier over the bounds fit
-const ZOOM_PUNCH_TIME = 0.35;  // seconds of aggressive punch-in after launch
-const ZOOM_PUNCH_RATE = 7.5;   // punch ease rate (~93% there when punch ends)
-const ZOOM_HOLD_RATE = 2.2;    // relaxed approach while the flight continues
-const ZOOM_RETURN_RATE = 2.6;  // settle back to bounds framing after sinking
+// Flight zoom energy: a quick deeper punch-in (~1.22x, the redesign's springier
+// camera) while the ball flies, then a relaxed hold; on sink/settle it eases
+// back home with a pronounced settle. Aim never zooms (owner verdict).
+const FLIGHT_ZOOM = 1.22;      // hold zoom multiplier over the bounds fit
+const ZOOM_PUNCH_TIME = 0.3;   // seconds of aggressive punch-in after launch
+const ZOOM_PUNCH_RATE = 9;     // punch ease rate (deeper, snappier launch hit)
+const ZOOM_HOLD_RATE = 2.6;    // relaxed approach while the flight continues
+const ZOOM_RETURN_RATE = 3.2;  // pronounced settle back to bounds on sink
 
 export class Camera {
   /** Uniform world→screen scale. */
@@ -99,7 +99,7 @@ export class Camera {
       this.cx = b.cx;
       this.cy = b.cy;
     } else {
-      this.scale = expDamp(this.scale, this.baseScale, 4, 1 / 60);
+      this.scale = expDamp(this.scale, this.baseScale, 5, 1 / 60);
     }
   }
 
@@ -114,10 +114,11 @@ export class Camera {
 
     // Gentle ball-follow: chase a point capped inside the level ellipse so the
     // camera pans with the shot but the course edge never leaves the frame.
+    // (Rates raised ~20% for the redesign's springier, more fluid camera.)
     let tgtX = this.follow ? this.baseCx + this.followCap.x : this.baseCx;
     let tgtY = this.follow ? this.baseCy + this.followCap.y : this.baseCy;
-    let panRate = flying ? 2.4 : 1.8;
-    // Zoom: bounds framing at rest/aim; a quick ~1.13x punch-in on launch that
+    let panRate = flying ? 2.9 : 2.2;
+    // Zoom: bounds framing at rest/aim; a quick ~1.22x punch-in on launch that
     // settles into a relaxed hold, then eases back home on sink.
     let tgtScale = this.baseScale;
     let zoomRate = ZOOM_RETURN_RATE;
