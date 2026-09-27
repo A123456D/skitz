@@ -448,7 +448,7 @@ class Game {
       // gravity always simulates (moving bodies, pulses, debris) — the world
       // is alive even while aiming; ball physics only matter in flight
       // pace: the world runs 1.3x real time (Perihelion snap); slow-mo beats scale from it
-      const PACE = 1.3;
+      const PACE = 1.45;
       const scale = this.sinkSlowT > 0 ? 0.3 : 1;
       if (this.sinkSlowT > 0) this.sinkSlowT -= dt;
       this.acc = Math.min(this.acc + dt * PACE * scale, 0.3);
@@ -515,11 +515,25 @@ class Game {
           this.audio.sfx('launch');
           this.buzz(10, 200);
           break;
-        case 'bounce':
-          this.audio.sfx('bounce', { gain: Math.min(1, 0.3 + e.speed / 600), pitch: 0.8 + Math.min(1, e.speed / 800) * 0.6 });
+        case 'bounce': {
+          // pitch by the touched body's mass — giants bloom deep, moonlets thrum
+          let pitch = 0.9;
+          let near: { mu: number } | null = null;
+          let bestD = Infinity;
+          for (const b of w.bodies) {
+            if (!b.active || b.mu < 1e5) continue;
+            const d = Math.hypot(e.x - b.cx, e.y - b.cy) - b.radius;
+            if (d < bestD) {
+              bestD = d;
+              near = b;
+            }
+          }
+          if (near) pitch = Math.max(0.5, Math.min(1.25, 1.3 - 0.6 * Math.log10(Math.max(1e5, near.mu) / 8e5)));
+          this.audio.sfx('bounce', { gain: Math.min(1, 0.3 + e.speed / 600), pitch });
           this.renderer.screenShake(Math.min(1, e.speed / 700) * (this.save.settings.shake ? 1 : 0));
           this.buzz(Math.min(18, 4 + Math.round(e.speed / 40)));
           break;
+        }
         case 'hazard':
           this.audio.sfx('hazard');
           this.hazardHappened = true;

@@ -189,6 +189,25 @@ export class VfxLayer {
     this.spawn(TEX_RING, x + ux * 10, y + uy * 10, 0, 0, 0.24, 36, 92, 0xffffff, true, 0.85);
   }
 
+  /**
+   * One short flare streak along the velocity vector — a fast skim past a
+   * body's falloff zone (armed at most once per body per stroke by milo.ts).
+   * Comet of additive glows trailing along -v plus a single hot spark.
+   */
+  nearFlare(x: number, y: number, vx: number, vy: number): void {
+    const spd = Math.hypot(vx, vy) || 1;
+    const ux = vx / spd;
+    const uy = vy / spd;
+    const n = Math.round(6 * this.q());
+    for (let i = 0; i < n; i++) {
+      const off = -i * 7; // comet tail behind the ball, along -v
+      this.spawn(TEX_GLOW, x + ux * off, y + uy * off,
+        vx * 0.22 + (Math.random() - 0.5) * 46, vy * 0.22 + (Math.random() - 0.5) * 46,
+        0.16 + i * 0.02, 15 - i * 1.6, 3, i === 0 ? 0xffffff : GRAVITY, true, 0.85, 0, 1.5);
+    }
+    this.spawn(TEX_STAR, x, y, ux * 60, uy * 60, 0.22, 10, 2, 0xffffff, true, 0.9, 0, 2);
+  }
+
   impactDust(x: number, y: number, nx: number, ny: number, speed: number): void {
     const n = Math.round(clamp(speed / 60, 3, 12) * this.q());
     const s0 = 7 + speed * 0.02; // spark size scales with impact speed

@@ -13,7 +13,7 @@ import { AMBER, DANGER, GREEN_WARM, TexFactory } from '../textures';
 
 const MAX_POINTS = 160;
 const MAX_DOTS = 56;
-const MIN_DOT_PX = 5.5; // screen-space floor — never faint at any zoom
+const MIN_DOT_PX = 3.4; // slim but present — readable on every theme
                         // (bumped for phone landscape: 390px-tall screens)
 
 export class PreviewLayer {
@@ -169,7 +169,7 @@ export class PreviewLayer {
         core.alpha = 1;
         halo.tint = core.tint;
         halo.width = halo.height = glowPx * inv;
-        halo.alpha = 0.34 + (i / this.pCount) * 0.1;
+        halo.alpha = 0.24 + (i / this.pCount) * 0.06;
       }
     }
     for (; di < MAX_DOTS; di++) {

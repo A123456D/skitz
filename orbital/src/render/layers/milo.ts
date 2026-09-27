@@ -20,6 +20,21 @@ const MILO_MIN_R_PX = 4.6; // css-px floor on the on-screen radius (phone legibi
 const TRAIL_N = 26;
 const TRAIL_DT = 0.024;
 
+const RECOIL_END = 0.25; // launch recoil timeline length (seconds)
+
+/**
+ * Launch recoil curve: compress to 70% over the first 60ms (ease-out), then a
+ * damped spring that overshoots to ~115% and settles back to 1 by 250ms.
+ */
+function recoilScale(t: number): number {
+  if (t < 0.06) {
+    const k = t / 0.06;
+    return 1 - 0.3 * k * (2 - k);
+  }
+  const u = t - 0.06;
+  return 1 - 0.3 * Math.cos(42 * u) * Math.exp(-9.3 * u);
+}
+
 export class MiloLayer {
   readonly container = new Container();
   private trailLayer = new Container();
@@ -56,6 +71,22 @@ export class MiloLayer {
   private leanY = 0;
   private eyeScaleY = 1;
   private hidden = false;
+
+  // --- field reaction: gravity stretch (springy), field-modulated roll,
+  // launch recoil timeline, near-body flare arming, motion-blur ghost
+  private gravStretch = 0;
+  private gravVel = 0; // spring velocity for gravStretch
+  private gravAng = 0;
+  private gravSpin = 0;
+  private recoilT = 999; // seconds since launch (999 = idle)
+  private flareBodyId: string | null = null;
+  flarePending = false; // consumed by index.ts -> vfx.nearFlare (zero-alloc handoff)
+  flareX = 0;
+  flareY = 0;
+  flareVx = 0;
+  flareVy = 0;
+  private ghost!: Sprite;
+  private ghostA = 0;
 
   constructor(tex: TexFactory) {
     this.tf = tex;
@@ -108,6 +139,12 @@ export class MiloLayer {
       this.trailLayer.addChild(sp);
       this.trail.push(sp);
     }
+
+    // motion-blur ghost: ONE pooled body sprite, stretched along velocity
+    this.ghost = new Sprite(tx.body);
+    this.ghost.anchor.set(0.5);
+    this.ghost.visible = false;
+    this.trailLayer.addChild(this.ghost);
   }
 
   reset(x: number, y: number): void {
@@ -122,6 +159,14 @@ export class MiloLayer {
     this.joyT = 0;
     this.stretch = 0;
     this.trailOn = false;
+    this.gravStretch = 0;
+    this.gravVel = 0;
+    this.gravSpin = 0;
+    this.recoilT = 999;
+    this.flareBodyId = null;
+    this.flarePending = false;
+    this.ghostA = 0;
+    this.ghost.visible = false;
     for (const sp of this.trail) sp.alpha = 0;
   }
 
@@ -129,8 +174,12 @@ export class MiloLayer {
     switch (e.type) {
       case 'launch': {
         const spd = Math.hypot(e.vx, e.vy);
-        this.stretch = clamp(spd / MAX_LAUNCH_SPEED, 0, 1) * 0.4;
+        // launch reads as a fling: recoil timeline (compress -> overshoot ->
+        // settle) owns the shape; skip the plain stretch channel
+        this.recoilT = 0;
+        this.stretch = 0;
         this.stretchAng = Math.atan2(e.vy, e.vx);
+        this.flareBodyId = null; // new stroke re-arms near-body flares
         this.trailOn = true;
         this.tClock = 0;
         // seed the ribbon at the launch point so it doesn't streak from origin
@@ -207,6 +256,9 @@ export class MiloLayer {
     if (this.hidden) {
       this.root.alpha = expDamp(this.root.alpha, 0, 8, dt);
       for (const sp of this.trail) sp.alpha = expDamp(sp.alpha, 0, 8, dt);
+      this.ghostA = expDamp(this.ghostA, 0, 8, dt);
+      this.ghost.visible = this.ghostA > 0.02;
+      this.ghost.alpha = this.ghostA;
       if (this.root.alpha < 0.02) this.root.visible = false;
       return;
     }
@@ -231,16 +283,80 @@ export class MiloLayer {
     else if (this.nearFragment(w)) mood = 'curious';
     else mood = 'idle';
 
-    // --- squash & stretch
+    // --- gravity reaction: nearest active field body at the ball drives a
+    // subtle stretch TOWARD it, steers roll rate, and arms near-body flares.
+    // Cheap linear scan; zero allocation.
+    let gStr = 0; // 0 at the influence edge -> 1 at the surface
+    if (b.flying && !b.dead) {
+      let bestS = 0;
+      let bestAx = 0;
+      let bestAy = 0;
+      for (const bd of w.bodies) {
+        if (!bd.active || bd.influenceR <= 0 || bd.mu <= 0) continue;
+        const dx = bd.cx - b.x;
+        const dy = bd.cy - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const edge = d - bd.radius; // distance beyond the surface
+        if (edge >= bd.influenceR) continue;
+        const s = 1 - edge / bd.influenceR;
+        if (s <= bestS) continue;
+        bestS = s;
+        bestAx = dx / d;
+        bestAy = dy / d;
+        // one flare per body per stroke: fast pass through the falloff zone
+        const skimR = bd.radius + Math.max(0, bd.influenceR - bd.radius) * 0.3;
+        if (speed > 400 && d < skimR && bd.id !== this.flareBodyId) {
+          this.flareBodyId = bd.id;
+          this.flarePending = true;
+          this.flareX = b.x;
+          this.flareY = b.y;
+          this.flareVx = b.vx;
+          this.flareVy = b.vy;
+        }
+      }
+      gStr = bestS;
+      if (gStr > 0) {
+        // ease the stretch axis toward the pull direction (shortest arc)
+        const tAng = Math.atan2(bestAy, bestAx);
+        let da = tAng - this.gravAng;
+        if (da > Math.PI) da -= Math.PI * 2;
+        else if (da < -Math.PI) da += Math.PI * 2;
+        this.gravAng += da * Math.min(1, 9 * dt);
+        // roll steered by orbit direction (v x r), rate scales with field
+        const cross = b.vx * bestAy - b.vy * bestAx;
+        this.gravSpin += Math.sign(cross) * gStr * 3.2 * dt;
+      }
+    }
+    // springy ease toward the pull elongation (max ~7.5%, subtle), returns to
+    // round with a slight overshoot when the ball flies free
+    {
+      const target = 0.075 * gStr;
+      const acc = (target - this.gravStretch) * 90 - this.gravVel * 11;
+      this.gravVel += acc * dt;
+      this.gravStretch += this.gravVel * dt;
+    }
+
+    // --- squash & stretch (priority: impact > launch recoil > gravity > launch)
     this.stretch = expDamp(this.stretch, 0, 3.2, dt);
     const impact = this.impactT > 0 ? (this.impactT / 0.42) * this.impactMag : 0;
-    this.squashC.rotation = this.impactT > 0
-      ? Math.atan2(this.impactNY, this.impactNX)
-      : this.stretchAng;
-    const st = this.stretch;
+    this.recoilT += dt;
+    const recoil = this.recoilT < RECOIL_END ? recoilScale(this.recoilT) : 1;
+    let axAng: number;
+    let ax = this.stretch;
+    if (this.impactT > 0) {
+      axAng = Math.atan2(this.impactNY, this.impactNX);
+    } else if (this.recoilT < RECOIL_END) {
+      axAng = this.stretchAng; // the fling owns the axis while recoiling
+    } else if (this.gravStretch > ax) {
+      ax = this.gravStretch;
+      axAng = this.gravAng;
+    } else {
+      axAng = this.stretchAng;
+    }
+    this.squashC.rotation = axAng;
     this.squashC.scale.set(
-      (1 + st) * (1 - impact * 0.45),
-      (1 - st * 0.75) * (1 + impact * 0.32),
+      (1 + ax) * (1 - impact * 0.45) * recoil,
+      (1 - ax * 0.75) * (1 + impact * 0.32) * (1 + (1 - recoil) * 0.22),
     );
 
     // --- idle wobble / panic shake / dizzy tilt
@@ -263,8 +379,9 @@ export class MiloLayer {
     this.face.x = expDamp(this.face.x, leanTargetX, 10, dt);
     this.face.y = expDamp(this.face.y, leanTargetY, 10, dt);
 
-    // --- spin: sim's visual roll accumulator drives seams + dimples
-    this.detail.rotation = b.spin;
+    // --- spin: sim's visual roll accumulator drives seams + dimples, scaled by
+    // local field strength (faster roll near mass, languid in dead space)
+    this.detail.rotation = b.spin * (0.55 + 0.45 * gStr) + this.gravSpin;
 
     // --- eyes by mood (+ blink)
     const tx = this.textures;
@@ -376,6 +493,26 @@ export class MiloLayer {
       for (let i = 0; i < TRAIL_N - 1; i++) {
         this.trail[i].alpha = expDamp(this.trail[i].alpha, 0, 10, dt);
       }
+    }
+
+    // --- motion-blur ghost: one pooled sprite trailing the ball at speed
+    const gTgt = b.flying && speed > 700 ? 0.25 * clamp((speed - 700) / 380, 0, 1) : 0;
+    this.ghostA = expDamp(this.ghostA, gTgt, 9, dt);
+    if (this.ghostA > 0.012 && b.flying) {
+      const inv = 1 / (speed || 1);
+      const ux = b.vx * inv;
+      const uy = b.vy * inv;
+      const ramp = clamp((speed - 700) / 400, 0, 1);
+      const h = VIS_R * 2 * zoomComp;
+      this.ghost.x = b.x - ux * (6 + 9 * ramp);
+      this.ghost.y = b.y - uy * (6 + 9 * ramp);
+      this.ghost.rotation = Math.atan2(uy, ux);
+      this.ghost.height = h;
+      this.ghost.width = h * (1 + 1.15 * ramp); // stretched along the flight axis
+      this.ghost.alpha = this.ghostA;
+      this.ghost.visible = true;
+    } else {
+      this.ghost.visible = false;
     }
   }
 

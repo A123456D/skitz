@@ -82,29 +82,63 @@ export function hiss(
 // ------------------------------------------------------------------ recipes
 
 function sLaunch(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Filtered noise sweep up — compressed-air launch, energy rising with the shot.
-  // Pace pass: near-instant attack and a brighter top to the sweep so the hit
-  // lands as a crack, not a swell.
-  hiss(v, c, t, 0.36, 0.36 * k, 'bandpass', 320, 3600, 1.0, 0.002);
-  tone(v, c.ctx, 'sine', 150, 380, t, 0.34, 0.08 * k, 0.002);
+  // Ion-driven departure — an airy band sweep with a soft harmonic streak:
+  // a fifth-locked pair glides up beneath the air, so the shot reads as a
+  // light-streak leaving, not a rocket cracking.
+  hiss(v, c, t, 0.4, 0.28 * k, 'bandpass', 500, 4200, 0.8, 0.008);
+  tone(v, c.ctx, 'sine', 220, 660, t, 0.38, 0.06 * k, 0.006);
+  tone(v, c.ctx, 'sine', 329.6, 988.9, t + 0.012, 0.36, 0.04 * k, 0.008); // fifth lock
 }
 
 function sBounce(v: SfxVoice, c: SfxCore, t: number, k: number, p: number): void {
-  // Short sine thunk — pitch + gain scale with impact speed (caller maps speed→pitch).
-  const sp = Math.min(2, Math.max(0.2, p));
-  // ±4 cents of random detune keeps rapid impacts from machine-gunning into one
-  // tone. 2^(cents/1200) is the exact cent conversion; Math.random is fine here
-  // because it only feeds scheduled audio parameters, never render state.
+  // Celestial bloom — contact between two bodies reads as a resonant swell,
+  // not a golf-mat thunk. Fundamental + detuned twin bloom over ~300-500 ms
+  // (soft 10 ms attack), a quiet octave partial adds shimmer-width, and a
+  // breathy noise kiss marks the instant of contact only. opts.pitch is
+  // mass-derived: 0.5 = giant planet's bass bloom, 1.4 = moonlet's thrum;
+  // heavier bodies also bloom slightly longer.
+  const sp = Math.min(2, Math.max(0.25, p));
+  // ±4 cents of random detune keeps rapid contacts from machine-gunning into
+  // one tone. 2^(cents/1200) is the exact cent conversion; Math.random is fine
+  // here because it only feeds scheduled audio parameters, never render state.
   const d = Math.pow(2, (Math.random() * 8 - 4) / 1200);
-  tone(v, c.ctx, 'sine', 150 * sp * d, 70 * d, t, 0.13, 0.34 * k * Math.min(1, sp));
-  hiss(v, c, t, 0.05, 0.1 * k * Math.min(1, sp), 'lowpass', 900, 300);
+  const f = 110 * sp * d;
+  const amp = Math.min(1, Math.sqrt(sp)); // mass → presence
+  const dur = Math.min(0.5, Math.max(0.3, 0.42 / Math.sqrt(sp)));
+  tone(v, c.ctx, 'sine', f, f * 0.98, t, dur, 0.26 * k * amp, 0.01);
+  tone(v, c.ctx, 'sine', f * 1.012, f * 0.99, t, dur * 0.85, 0.15 * k * amp, 0.012); // twin = width
+  tone(v, c.ctx, 'triangle', f * 2.003, f * 1.98, t, dur * 0.7, 0.06 * k * amp, 0.012); // octave shimmer
+  hiss(v, c, t, 0.07, 0.05 * k * amp, 'bandpass', Math.min(2400, f * 12), Math.min(1200, f * 6), 0.6, 0.004);
 }
 
 function sHazard(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Harsh descending zap — two detuned saws beat against each other = bite.
-  tone(v, c.ctx, 'sawtooth', 640, 80, t, 0.34, 0.22 * k);
-  tone(v, c.ctx, 'sawtooth', 647, 82, t, 0.34, 0.11 * k);
-  hiss(v, c, t, 0.15, 0.1 * k, 'highpass', 1800, null, 0.7);
+  // Energy tear — true ring mod: carrier × square modulator produces fc±fm
+  // sidebands (inharmonic, metallic), both voices sweeping down together so
+  // the tear rips downward. A highpass noise rip breathes at its edges.
+  const car = c.ctx.createOscillator();
+  car.type = 'sawtooth';
+  car.frequency.setValueAtTime(520, t);
+  car.frequency.exponentialRampToValueAtTime(70, t + 0.32);
+  const mod = c.ctx.createOscillator();
+  mod.type = 'square';
+  mod.frequency.setValueAtTime(311, t);
+  mod.frequency.exponentialRampToValueAtTime(47, t + 0.32);
+  const ring = c.ctx.createGain();
+  ring.gain.value = 0; // the modulator rides this param — its ±1 square flips the carrier's sign
+  mod.connect(ring.gain);
+  const env = c.ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.linearRampToValueAtTime(0.2 * k, t + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+  car.connect(ring);
+  ring.connect(env);
+  env.connect(v.out);
+  car.start(t);
+  car.stop(t + 0.4);
+  mod.start(t);
+  mod.stop(t + 0.4);
+  v.sources.push(car, mod);
+  hiss(v, c, t, 0.18, 0.07 * k, 'highpass', 2400, 900, 0.7, 0.003);
 }
 
 function sSink(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -127,22 +161,31 @@ function sSink(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 }
 
 function sLipout(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Dull double knock — the ball rejects the cup.
-  tone(v, c.ctx, 'sine', 165, 120, t, 0.1, 0.3 * k);
-  tone(v, c.ctx, 'sine', 150, 110, t + 0.13, 0.1, 0.26 * k);
-  hiss(v, c, t, 0.04, 0.08 * k, 'lowpass', 500, null);
+  // The gravity well refuses — a dissonant beat-wobble: near-unison sines knock
+  // against each other (≈3 Hz beat = shimmering refusal), then the residue
+  // falls away below the cup.
+  tone(v, c.ctx, 'sine', 196, 172, t, 0.12, 0.2 * k);
+  tone(v, c.ctx, 'sine', 199, 174, t, 0.12, 0.16 * k);
+  tone(v, c.ctx, 'sine', 131, 92, t + 0.14, 0.16, 0.14 * k);
 }
 
 function sSettled(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Soft puff — the ball coming to rest.
-  hiss(v, c, t, 0.32, 0.16 * k, 'lowpass', 420, 160, 0.7, 0.06);
-  tone(v, c.ctx, 'sine', 220, 180, t, 0.15, 0.04 * k);
+  // Rest = energy dissipating — a soft descending shimmer: three glassy
+  // partials cascade downward as the air bed under them darkens.
+  for (let i = 0; i < 3; i++) {
+    const f = 640 * Math.pow(0.78, i); // 640 / 499 / 389 Hz — falling tail
+    tone(v, c.ctx, 'sine', f, f * 0.97, t + i * 0.05, 0.3 - i * 0.05, (0.075 - i * 0.015) * k, 0.012);
+  }
+  hiss(v, c, t, 0.35, 0.045 * k, 'lowpass', 900, 220, 0.7, 0.03);
 }
 
 function sVoided(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Downward fade whoosh — drifting into the void.
-  hiss(v, c, t, 0.95, 0.22 * k, 'bandpass', 950, 110, 1.0, 0.04);
-  tone(v, c.ctx, 'sine', 320, 70, t, 0.9, 0.1 * k);
+  // Falling into nothing — a long dark pull: an octave-paired fundamental
+  // slides down two octaves while the air bed collapses below the audible
+  // band. Nothing lands; the sound just runs out.
+  tone(v, c.ctx, 'sine', 220, 40, t, 1.0, 0.15 * k);
+  tone(v, c.ctx, 'sine', 112, 30, t + 0.05, 1.0, 0.09 * k, 0.03); // sub shadow joins late
+  hiss(v, c, t, 1.0, 0.15 * k, 'bandpass', 700, 60, 0.9, 0.05);
 }
 
 function sOrbit(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -189,9 +232,10 @@ function sPinPlace(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 }
 
 function sPinDeny(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Dull thud — placement rejected.
-  tone(v, c.ctx, 'sine', 92, 58, t, 0.16, 0.3 * k);
-  hiss(v, c, t, 0.09, 0.12 * k, 'lowpass', 260, null);
+  // Placement refused — a pressure drop: a triangle sub sags downward while a
+  // narrow noise huff escapes; force-field denial, not a thud.
+  tone(v, c.ctx, 'triangle', 130, 62, t, 0.22, 0.2 * k);
+  hiss(v, c, t, 0.12, 0.08 * k, 'bandpass', 420, 160, 0.9, 0.004);
 }
 
 function sWormhole(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -235,12 +279,12 @@ function sAnnouncer(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 /** Scheduled envelope lifetime per sfx (seconds) — used for cap bookkeeping. */
 export const SFX_DURATION: Record<SfxName, number> = {
   launch: 0.45,
-  bounce: 0.2,
+  bounce: 0.55, // resonant bloom — mass-scaled, up to 0.5 s on the heaviest bodies
   hazard: 0.4,
   sink: 1.1, // pace pass: whole fanfare (thoom + arp + 0.16+0.9 s cymbal) ≤ ~1.2 s
   lipout: 0.3,
   settled: 0.4,
-  voided: 1.05,
+  voided: 1.15,
   orbit: 1.3,
   switch: 0.5,
   sequenceReset: 0.5,

@@ -140,6 +140,11 @@ class OrbitalRendererImpl implements OrbitalRenderer {
     this.objects.update(w, dt);
     this.milo.markAim(this.aimActive);
     this.milo.update(w, dt, this.cam.scale);
+    // milo arms near-body skims; route the pooled flare burst (zero-alloc)
+    if (this.milo.flarePending) {
+      this.milo.flarePending = false;
+      this.vfx.nearFlare(this.milo.flareX, this.milo.flareY, this.milo.flareVx, this.milo.flareVy);
+    }
     this.vfx.update(dt);
     this.preview.update(dt, w.ball.x, w.ball.y, this.cam.scale);
     this.lastShot.update(this.cam.scale);
