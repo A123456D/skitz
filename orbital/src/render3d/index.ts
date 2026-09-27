@@ -19,7 +19,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { cloudTexture, groundAlbedo, groundBump } from './textures';
+import { cloudTexture } from './textures';
 import type { MiloMood, OrbitalRenderer, PinGhost } from '../render/api';
 import type { PredPoint, SimEvent, World } from '../sim';
 import { BALL_R, HOLE_CAPTURE_R } from '../sim';
@@ -208,7 +208,6 @@ export class Renderer3D implements OrbitalRenderer {
   private bodyViews: BodyView[] = [];
   private milo = new THREE.Group();
   private miloMesh: THREE.Mesh | null = null;
-  private contactBlob: THREE.Mesh | null = null;
   private holeGroup = new THREE.Group();
   private beacon: THREE.Sprite | null = null;
   private beam: THREE.Mesh | null = null;
@@ -427,8 +426,7 @@ export class Renderer3D implements OrbitalRenderer {
   async mount(host: HTMLElement): Promise<void> {
     this.host = host;
     const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    r.shadowMap.enabled = true;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    r.shadowMap.enabled = false; // no floor: nothing to catch shadows
     // filmic response — richer contrast than linear, kind to the teal palette
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.32;
@@ -621,7 +619,6 @@ export class Renderer3D implements OrbitalRenderer {
     disposeTree(this.holeGroup);
     disposeTree(this.milo);
     this.miloMesh = null;
-    this.contactBlob = null;
     this.fxGroup.clear();
     this.bodyViews = [];
     this.beamViews = [];
@@ -650,17 +647,9 @@ export class Renderer3D implements OrbitalRenderer {
     // --- lights
     const hemi = new THREE.HemisphereLight(col(theme.skyTop), col(theme.skyBottom), 0.85);
     this.worldGroup.add(hemi);
-    const sunLight = new THREE.DirectionalLight(col(theme.sunColor), 2.2);    sunLight.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.75, sunDir.z).normalize(), 4200));
+    const sunLight = new THREE.DirectionalLight(col(theme.sunColor), 2.2);
+    sunLight.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.75, sunDir.z).normalize(), 4200));
     sunLight.target.position.set(b.cx, 0, -b.cy);
-    sunLight.castShadow = this.quality === 'full';
-    const R = Math.max(b.rx, b.ry) * 1.35;
-    sunLight.shadow.camera.left = -R;
-    sunLight.shadow.camera.right = R;
-    sunLight.shadow.camera.top = R;
-    sunLight.shadow.camera.bottom = -R;
-    sunLight.shadow.camera.near = 200;
-    sunLight.shadow.camera.far = 9500;
-    sunLight.shadow.mapSize.set(this.quality === 'full' ? 2048 : 1024, this.quality === 'full' ? 2048 : 1024);
     this.worldGroup.add(sunLight, sunLight.target);
 
     // cool back-light: the unlit limb keeps a whisper of definition
@@ -668,56 +657,22 @@ export class Renderer3D implements OrbitalRenderer {
     rim.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.5, sunDir.z).normalize(), -3800));
     this.worldGroup.add(rim);
 
-    // distance fog: the far ground melts into the sky's own horizon color
-    const gR = Math.hypot(b.rx, b.ry) * 1.6;
-    this.scene.fog = new THREE.Fog(new THREE.Color(col(theme.skyBottom)).multiplyScalar(0.85), gR * 0.62, gR * 2.1);
-
     // --- sky dome + stars + nebula + sun glow
     this.buildSky(w, theme, sunDir);
 
-    // --- the plane: displaced noise terrain — flat where you play, duned rims
-    // melting into the fog, albedo + bump from the procedural field
-    const albedo = groundAlbedo(theme.skyTop, theme.skyBottom, w.def.id);
-    albedo.repeat.set(3, 3);
-    const bump = groundBump(w.def.id);
-    bump.repeat.set(3, 3);
-    const size = gR * 2.3;
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(size, size, 120, 120),
-      new THREE.MeshStandardMaterial({
-        map: albedo, bumpMap: bump, bumpScale: 16,
-        roughness: 1, envMapIntensity: 0.15,
+    // no floor: the course floats in the void. A whisper-dark disc inside the
+    // bounds dims the starfield behind gameplay so the actors stay readable —
+    // it reads as sky, not surface.
+    const voidDisc = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 72),
+      new THREE.MeshBasicMaterial({
+        color: 0x010a08, transparent: true, opacity: 0.32, depthWrite: false,
       }),
     );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.set(b.cx, -0.5, -b.cy);
-    this.displaceRim(ground, b, (hashSeed(w.def.id) % 628) / 100);
-    ground.receiveShadow = true;
-    this.worldGroup.add(ground);
-
-    // nebula light-pools lying on the plane — echoes of the 2D fog, they lift
-    // the mid-tones and give the table its "space, not floor" read
-    theme.nebulaColors.forEach((nc, i) => {
-      const patch = new THREE.Mesh(
-        new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({
-          map: blobTexture(nc), transparent: true, opacity: 0.09,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        }),
-      );
-      patch.rotation.x = -Math.PI / 2;
-      patch.rotation.z = hashSeed(w.def.id + i) % 628 / 100;
-      const a = (i / theme.nebulaColors.length) * Math.PI * 2 + 0.7;
-      const px2 = b.cx + Math.cos(a) * b.rx * (0.45 + 0.2 * i);
-      const py2 = b.cy + Math.sin(a) * b.ry * (0.45 + 0.2 * i);
-      patch.position.set(px2, 0.15, -py2);
-      const s = Math.max(b.rx, b.ry) * (1.1 + 0.25 * i);
-      patch.scale.set(s, s * 0.72, 1);
-      this.worldGroup.add(patch);
-    });
-
-    // per-archetype ground pattern — the table itself carries the theme
-    this.addGroundPattern(w, bgVariantFor(w.def.id));
+    voidDisc.rotation.x = -Math.PI / 2;
+    voidDisc.position.set(b.cx, -1, -b.cy);
+    voidDisc.scale.set(b.rx * 1.04, b.ry * 1.04, 1);
+    this.worldGroup.add(voidDisc);
 
     // --- bounds ellipse (dashed gravity line)
     const pts: THREE.Vector3[] = [];
@@ -764,15 +719,7 @@ export class Renderer3D implements OrbitalRenderer {
       new THREE.SphereGeometry(BALL_R, this.quality === 'full' ? 32 : 16, this.quality === 'full' ? 24 : 12),
       new THREE.MeshStandardMaterial({ color: 0xf2f6f8, roughness: 0.22, metalness: 0.08, envMapIntensity: 0.8 }),
     );
-    this.miloMesh.castShadow = true;
-    const blobTex = radialTexture('rgba(2,16,14,0.55)', 'rgba(2,16,14,0)');
-    this.contactBlob = new THREE.Mesh(
-      new THREE.CircleGeometry(BALL_R * 1.7, 24),
-      new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }),
-    );
-    this.contactBlob.rotation.x = -Math.PI / 2;
-    this.contactBlob.position.y = 0.3;
-    this.milo.add(this.miloMesh, this.contactBlob);
+    this.milo.add(this.miloMesh);
 
     this.fitCamera(w.def.bounds);
   }
@@ -821,91 +768,6 @@ export class Renderer3D implements OrbitalRenderer {
     }
   }
 
-  /** Rim displacement: the play field stays flat; beyond it the terrain rises
-   *  into jagged ridged highlands — a cratered cosmic plain, not a lawn. */
-  private displaceRim(ground: THREE.Mesh, b: World['def']['bounds'], seed: number): void {
-    const pos = ground.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const playR = Math.max(b.rx, b.ry) * 1.12;
-    const rimR = Math.max(b.rx, b.ry) * 1.5;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const d = Math.hypot(x, y);
-      const edge = clamp((d - playR) / (rimR - playR), 0, 1);
-      if (edge <= 0) continue;
-      const e = edge * edge * (3 - 2 * edge);
-      // ridged noise: folded sines give sharp mountain crests, not dunes
-      const r1 = 1 - Math.abs(Math.sin(x * 0.0015 + seed));
-      const r2 = 1 - Math.abs(Math.sin(y * 0.0018 + seed * 2.1));
-      const r3 = 1 - Math.abs(Math.sin((x + y) * 0.0011 + seed * 3.3));
-      const ridge = Math.pow(clamp(r1 * r2 * 1.4, 0, 1), 1.7) * 118
-        + Math.pow(r3, 2.2) * 52
-        + Math.sin(x * 0.006 + y * 0.005 + seed * 3.1) * 9;
-      pos.setZ(i, ridge * e + e * 30);
-    }
-    ground.geometry.computeVertexNormals();
-  }
-
-  /** Ground furniture per silhouette archetype: grid, arcs, craters, bands. */
-  private addGroundPattern(w: World, variant: number): void {
-    const b = w.def.bounds;
-    let seed = hashSeed(w.def.id + ':ground');
-    const rnd = (): number => {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
-    if (variant === 5) {
-      // grid: survey lines every 220u
-      const pts: THREE.Vector3[] = [];
-      const R = Math.max(b.rx, b.ry) * 1.35;
-      for (let gx = -R; gx <= R; gx += 220) {
-        pts.push(px(b.cx + gx, b.cy - R, 0.3), px(b.cx + gx, b.cy + R, 0.3));
-        pts.push(px(b.cx - R, b.cy + gx, 0.3), px(b.cx + R, b.cy + gx, 0.3));
-      }
-      const gg = new THREE.BufferGeometry().setFromPoints(pts);
-      this.worldGroup.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({
-        color: GRAVITY, transparent: true, opacity: 0.06,
-      })));
-    } else if (variant === 0) {
-      // arches: concentric guide rings
-      for (let i = 1; i <= 3; i++) {
-        const pts: THREE.Vector3[] = [];
-        const N = 90;
-        for (let j = 0; j <= N; j++) {
-          const a = (j / N) * Math.PI * 2;
-          pts.push(px(b.cx + Math.cos(a) * b.rx * (i / 3.4), b.cy + Math.sin(a) * b.ry * (i / 3.4), 0.3));
-        }
-        const ag = new THREE.BufferGeometry().setFromPoints(pts);
-        this.worldGroup.add(new THREE.Line(ag, new THREE.LineBasicMaterial({
-          color: GRAVITY, transparent: true, opacity: 0.07,
-        })));
-      }
-    } else if (variant === 1 || variant === 2) {
-      // wreck/craters: dark scorch patches
-      for (let i = 0; i < 9; i++) {
-        const patch = new THREE.Mesh(
-          new THREE.CircleGeometry(60 + rnd() * 130, 20),
-          new THREE.MeshBasicMaterial({ color: 0x010605, transparent: true, opacity: 0.35, depthWrite: false }),
-        );
-        patch.rotation.x = -Math.PI / 2;
-        const a = rnd() * Math.PI * 2;
-        patch.position.set(b.cx + Math.cos(a) * b.rx * (0.3 + rnd() * 0.85), 0.2, -(b.cy + Math.sin(a) * b.ry * (0.3 + rnd() * 0.85)));
-        this.worldGroup.add(patch);
-      }
-    } else if (variant === 3) {
-      // horizon: mown bands
-      for (let i = 1; i <= 4; i += 2) {
-        const band = new THREE.Mesh(
-          new THREE.RingGeometry(0, 1, 56),
-          new THREE.MeshBasicMaterial({ color: GRAVITY, transparent: true, opacity: 0.035, side: THREE.DoubleSide, depthWrite: false }),
-        );
-        band.rotation.x = -Math.PI / 2;
-        band.position.set(b.cx, 0.15, -b.cy);
-        band.scale.set(b.rx * (i / 4), b.ry * (i / 4), 1);
-        this.worldGroup.add(band);
-      }
-    }
-  }
 
   // -------------------------------------------------------------- builders
 
@@ -938,32 +800,49 @@ export class Renderer3D implements OrbitalRenderer {
     dome.position.copy(center);
     this.worldGroup.add(dome);
 
-    // sparse icon sky: stars in the upper hemisphere, two layers for twinkle
-    for (let layer = 0; layer < 2; layer++) {
-      const n = Math.round(375 * theme.starDensity);
+    // THE SKY IS STARS: a dense field biased toward the horizon band the
+    // tilted camera actually sees, plus a milky-way stripe for depth
+    const starField = (
+      n: number, size: number, opacity: number,
+      seedStr: string, band?: number,
+    ): THREE.Points => {
       const pos = new Float32Array(n * 3);
       const colArr = new Float32Array(n * 3);
       const c = new THREE.Color();
+      let s = hashSeed(seedStr);
+      const rnd = (): number => {
+        s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+        return s / 4294967296;
+      };
       for (let i = 0; i < n; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const e = Math.asin(0.08 + Math.random() * 0.9);
+        const a = rnd() * Math.PI * 2;
+        // uniform on the sphere: the tilted camera looks THROUGH the void, so
+        // stars wrap every which way — there is no horizon in space
+        const e = Math.asin(clamp(-0.96 + rnd() * 1.92, -1, 1))
+          + (band !== undefined ? Math.sin(a + band) * 0.38 : 0);
         const r = 52000;
         pos[i * 3] = center.x + Math.cos(a) * Math.cos(e) * r;
         pos[i * 3 + 1] = Math.sin(e) * r;
         pos[i * 3 + 2] = center.z + Math.sin(a) * Math.cos(e) * r;
-        c.setHex(0xdfeef2).multiplyScalar(0.35 + Math.random() * 0.65);
+        c.setHex(rnd() > 0.82 ? 0xbfd8ff : rnd() > 0.5 ? 0xdfeef2 : 0xfff2d8)
+          .multiplyScalar(0.45 + rnd() * 0.55);
         colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
       }
       const sg = new THREE.BufferGeometry();
       sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       sg.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
       const stars = new THREE.Points(sg, new THREE.PointsMaterial({
-        size: 140, vertexColors: true, transparent: true, opacity: 0.9,
+        size, map: blobTexture('rgba(255,255,255,1)'), vertexColors: true,
+        transparent: true, opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
       }));
       this.starLayers.push(stars);
       this.worldGroup.add(stars);
-    }
+      return stars;
+    };
+    starField(Math.round(900 * theme.starDensity), 900, 0.95, w.def.id + ':sf');
+    starField(Math.round(500 * theme.starDensity), 640, 0.7, w.def.id + ':sf2');
+    starField(Math.round(650 * theme.starDensity), 760, 0.8, w.def.id + ':band', 1.1);
 
     // nebula blobs — layered cloud fields, theme hues, far side of the fog
     theme.nebulaColors.forEach((nc, i) => {
@@ -1555,13 +1434,6 @@ export class Renderer3D implements OrbitalRenderer {
       this.miloMesh.rotation.y = Math.atan2(w.ball.vx, -w.ball.vy);
       this.miloMesh.scale.set(perp, 1 - 0.12 * m + 0.2 * this.bounceSquash, along);
       this.milo.visible = shrink > 0.01;
-    }
-    // contact shadow: grounded when settled, a faint drop while airborne
-    if (this.contactBlob) {
-      this.contactBlob.position.set(0, -this.milo.position.y + 0.35, 0);
-      const bm = this.contactBlob.material as THREE.MeshBasicMaterial;
-      const target = w.ball.flying ? 0.16 : 0.42;
-      bm.opacity = expDamp(bm.opacity, target, 8, dt);
     }
     // flight trail: shift the ribbon, write the newest head point
     this.trail.visible = w.ball.flying;
