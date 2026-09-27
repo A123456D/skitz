@@ -727,19 +727,20 @@ function drawBody(ctx: CanvasRenderingContext2D, w: number, h: number, material:
     }
   }
 
-  // --- shading pass: key light from +X, terminator across the sphere
+  // --- shading pass: key light from +X, hard terminator across the sphere
+  // (graded up: brighter key, deeper shadow — stronger planet read)
   const lg = ctx.createLinearGradient(r, 0, -r, 0);
-  lg.addColorStop(0, 'rgba(255,248,232,0.14)');
+  lg.addColorStop(0, 'rgba(255,248,232,0.24)');
   lg.addColorStop(0.45, 'rgba(255,248,232,0)');
-  lg.addColorStop(0.62, 'rgba(6,8,18,0.18)');
-  lg.addColorStop(1, 'rgba(4,6,14,0.62)');
+  lg.addColorStop(0.62, 'rgba(6,8,18,0.28)');
+  lg.addColorStop(1, 'rgba(4,6,14,0.72)');
   ctx.globalAlpha = 1;
   ctx.fillStyle = lg;
   ctx.fillRect(-r - pad, -r - pad, r * 2 + pad * 2, r * 2 + pad * 2);
 
   // highlight pool near the lit pole
   const hg = ctx.createRadialGradient(r * 0.55, -r * 0.12, 0, r * 0.55, -r * 0.12, r * 0.55);
-  hg.addColorStop(0, 'rgba(255,250,238,0.2)');
+  hg.addColorStop(0, 'rgba(255,250,238,0.3)');
   hg.addColorStop(1, 'rgba(255,250,238,0)');
   ctx.fillStyle = hg;
   ctx.fillRect(-r - pad, -r - pad, r * 2 + pad * 2, r * 2 + pad * 2);
@@ -754,18 +755,19 @@ function drawBody(ctx: CanvasRenderingContext2D, w: number, h: number, material:
 
   ctx.restore(); // unclip
 
-  // --- rim light: thin bright arc on the sun side (design §9), dark limb opposite
+  // --- rim light: thin bright arc on the sun side (design §9), dark limb
+  // opposite (graded up: punchier rim vs. the deeper terminator)
   ctx.lineWidth = Math.max(1.6, r * 0.045);
-  ctx.strokeStyle = 'rgba(255,242,220,0.55)';
+  ctx.strokeStyle = 'rgba(255,242,220,0.78)';
   ctx.beginPath();
   ctx.arc(0, 0, r - ctx.lineWidth * 0.5, -1.0, 1.0);
   ctx.stroke();
   ctx.lineWidth = Math.max(1.2, r * 0.03);
-  ctx.strokeStyle = 'rgba(255,242,220,0.2)';
+  ctx.strokeStyle = 'rgba(255,242,220,0.3)';
   ctx.beginPath();
   ctx.arc(0, 0, r - ctx.lineWidth * 0.5, -1.35, 1.35);
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(2,4,12,0.5)';
+  ctx.strokeStyle = 'rgba(2,4,12,0.6)';
   ctx.beginPath();
   ctx.arc(0, 0, r - ctx.lineWidth * 0.5, Math.PI - 0.9, Math.PI + 0.9);
   ctx.stroke();

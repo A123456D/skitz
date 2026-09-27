@@ -9,8 +9,8 @@ import type { Screen } from './api';
 import { button, div, el } from './dom';
 
 const STORE_KEY = 'orbital.tutorial.v1';
-/** Per-card dwell time — long enough to read, short enough to not annoy. */
-const CARD_MS = 2500;
+/** Per-card dwell time — pace pass: 1.7 s keeps the tips moving with the game. */
+const CARD_MS = 1700;
 
 const STEPS: readonly string[] = [
   'DRAG anywhere to aim — release to fire',

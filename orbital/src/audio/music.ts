@@ -251,9 +251,12 @@ export function createMusic(core: MusicCore): MusicEngine {
     setIntensity(v: number): void {
       const k = Math.min(1, Math.max(0, v));
       const now = ctx.currentTime;
-      pulseAM.gain.setTargetAtTime(0.3 * k, now, 0.5);
-      lfoAmt.gain.setTargetAtTime(0.26 * k, now, 0.5);
-      washGain.gain.setTargetAtTime(0.02 * k, now, 0.6);
+      // Pace pass: entry gains roughly doubled and the ramps quickened so the
+      // pulse/wash clearly ARRIVES at high intensity in flight and just as
+      // clearly drops after. The master compressor guards the peaks.
+      pulseAM.gain.setTargetAtTime(0.55 * k, now, 0.3);
+      lfoAmt.gain.setTargetAtTime(0.5 * k, now, 0.3);
+      washGain.gain.setTargetAtTime(0.05 * k, now, 0.4);
     },
 
     startScheduler(): void {

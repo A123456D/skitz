@@ -8,7 +8,8 @@ import type { PredPoint } from '../sim';
 import type { SimEvent, World } from '../sim/types';
 import { Camera } from './camera';
 import { TexFactory } from './textures';
-import { BackgroundLayer, beginBackgroundFrame, regionSun, reportVoids } from './layers/background';
+import { BackgroundLayer, beginBackgroundFrame, reportVoids } from './layers/background';
+import { worldThemeFor, themeSunPos } from './themes';
 import { BodiesLayer } from './layers/bodies';
 import { ZonesLayer } from './layers/zones';
 import { ObjectsLayer } from './layers/objects';
@@ -303,13 +304,15 @@ class OrbitalRendererImpl implements OrbitalRenderer {
   private rebuild(w: World): void {
     this.lastWorld = w;
     const b = w.def.bounds;
-    const sun = regionSun(w.def.region, b);
+    // Per-level world theme: its key-light placement drives BOTH the
+    // background glow and the baked body terminators (one honest light).
+    const sun = themeSunPos(worldThemeFor(w.def.id).sunSide, b);
 
     this.switchIdx.clear();
     w.switches.forEach((s, i) => this.switchIdx.set(s.def.id, i));
 
     this.cam.frame(b, true);
-    this.bg.build(w.def.region, b, w.def.id); // def.id -> per-level bg variant
+    this.bg.build(w.def.id, w.def.region, b); // theme -> per-level world grade
     this.bg.resize(this.cam.viewW, this.cam.viewH);
     this.bodies.build(w, sun.x, sun.y);
     this.zones.build(w);

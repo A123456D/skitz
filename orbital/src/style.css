@@ -31,7 +31,7 @@ canvas { display: block; }
 /* Vignette — subtle premium frame over the canvas (under DOM UI) */
 #ob-vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 2;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(2, 4, 10, 0.45) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(2, 4, 10, 0.3) 100%);
 }
 
 /* Aim power bar — slim bottom meter while dragging (Perihelion-style) */

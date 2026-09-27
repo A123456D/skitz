@@ -22,6 +22,7 @@ import {
   speedRamp,
 } from '../src/render/core';
 import { Camera } from '../src/render/camera';
+import { THEMES, WORLD_MOTIFS, worldThemeFor, type SunSide, type WorldTheme } from '../src/render/themes';
 
 describe('camera framing math', () => {
   it('fits the level ellipse inside the viewport with margin', () => {
@@ -138,6 +139,19 @@ describe('aim-time camera behavior', () => {
     expect(cam.cx).toBeGreaterThan(0); // still follows the shot
     expect(cam.scale).toBeLessThan(base * 1.15);
     expect(cam.scale).toBeGreaterThan(0);
+  });
+
+  it('flight zoom punches in fast (~1.13x) and settles back on sink', () => {
+    const cam = new Camera();
+    cam.setView(1280, 720);
+    cam.frame(b, true);
+    const base = cam.scale;
+    const ball = { x: 300, y: 0 };
+    for (let i = 0; i < 45; i++) cam.update(1 / 60, ball, true); // 0.75 s
+    expect(cam.scale).toBeGreaterThan(base * 1.08); // punch landed
+    expect(cam.scale).toBeLessThan(base * 1.15); // playtest ceiling holds
+    for (let i = 0; i < 240; i++) cam.update(1 / 60, ball, false); // sink + rest
+    expect(cam.scale / base).toBeCloseTo(1, 3); // settled back to bounds fit
   });
 });
 
@@ -366,6 +380,68 @@ describe('per-level background variant', () => {
     expect(v).toBe(bgVariantFor('XYZ'));
     expect(v).toBeGreaterThanOrEqual(0);
     expect(v).toBeLessThan(BG_VARIANT_COUNT);
+  });
+});
+
+describe('world themes (24 unique worlds, L01..L24)', () => {
+  const id = (n: number): string => `L${String(n).padStart(2, '0')}`;
+  const SIDES: readonly SunSide[] = ['left', 'right', 'high', 'low'];
+  const HEX = /^#[0-9a-f]{6}$/;
+  const level = (n: number): WorldTheme => worldThemeFor(id(n));
+
+  it('curates all 24 levels with well-formed fields', () => {
+    for (let n = 1; n <= 24; n++) {
+      const t = level(n);
+      expect(THEMES[id(n)]).toBeDefined();
+      expect(HEX.test(t.skyTop)).toBe(true);
+      expect(HEX.test(t.skyBottom)).toBe(true);
+      expect(HEX.test(t.sunColor)).toBe(true);
+      expect(HEX.test(t.dustColor)).toBe(true);
+      expect(HEX.test(t.accentTint)).toBe(true);
+      for (const h of t.nebulaColors) expect(HEX.test(h)).toBe(true);
+      expect(t.nebulaColors.length).toBeGreaterThanOrEqual(2);
+      expect(t.nebulaColors.length).toBeLessThanOrEqual(3);
+      expect(SIDES).toContain(t.sunSide);
+      expect(WORLD_MOTIFS).toContain(t.silhouetteMotif);
+      // colors actually parse through the renderer's parser
+      expect(col(t.skyTop)).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps nebulaAlpha in the readability band 0.25..0.4', () => {
+    for (let n = 1; n <= 24; n++) {
+      const a = level(n).nebulaAlpha;
+      expect(a).toBeGreaterThanOrEqual(0.25);
+      expect(a).toBeLessThanOrEqual(0.4);
+    }
+  });
+
+  it('never repeats a hue family or motif between adjacent levels', () => {
+    for (let n = 2; n <= 24; n++) {
+      expect(level(n).family).not.toBe(level(n - 1).family);
+      expect(level(n).silhouetteMotif).not.toBe(level(n - 1).silhouetteMotif);
+    }
+  });
+
+  it('spreads every hue family and every motif across the 24 worlds', () => {
+    const families = new Set<string>();
+    const motifs = new Set<string>();
+    for (let n = 1; n <= 24; n++) {
+      families.add(level(n).family);
+      motifs.add(level(n).silhouetteMotif);
+    }
+    expect(families.size).toBe(24); // every level its own hue family
+    expect(motifs.size).toBe(WORLD_MOTIFS.length); // all 6 archetypes used
+  });
+
+  it('is deterministic, and unknown ids fall back by hash into the table', () => {
+    expect(worldThemeFor('L07')).toBe(worldThemeFor('L07'));
+    expect(worldThemeFor('L07')).toBe(THEMES.L07);
+    for (const unknown of ['XYZ', 'bonus-9', '']) {
+      const t = worldThemeFor(unknown);
+      expect(t).toBe(worldThemeFor(unknown)); // stable across calls
+      expect(Object.values(THEMES)).toContain(t); // still a curated world
+    }
   });
 });
 

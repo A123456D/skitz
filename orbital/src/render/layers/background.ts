@@ -1,22 +1,28 @@
 // layers/background.ts — the "cosmic diorama" depth stack (design §9):
-// sky gradient -> optional nebula wash -> starfield -> region sun (glow + core)
+// sky gradient -> themed nebula wash -> starfield -> world sun (glow + core)
 // -> 2 parallax silhouette bands -> drifting ambient dust.
 //
-// PER-LEVEL VARIANTS: every level picks one of 6 background archetypes via
-// bgVariantFor(def.id) — L01..L24 -> hash % 6 + block offset, de-collided vs
-// the previous level (see core.ts). Archetypes change COMPOSITION and motif
-// (starfield character, silhouette band, nebula, sun distance/size); COLOR
-// always comes from REGION_PALETTES so the 4 regions keep their identity.
-// All variant elements are pre-built in build() (once per level load); the
-// per-frame path only does transform/alpha writes, as before.
-// Mapping: L01..L24 -> archetype via bgVariantFor (see core.ts).
+// PER-LEVEL WORLDS: every level gets a full THEME from ../themes.ts (curated
+// L01..L24 table) — sky gradient, key-light color + placement, 2-3 nebula
+// hues at 0.25..0.4 alpha, one of the 6 silhouette archetypes, dust + accent
+// tints. Adjacent levels never share a hue family or a motif, so any two
+// screenshots read as obviously different worlds. REGION_PALETTES survive
+// only as a faint ~10% base influence blended into the sky. All themed
+// elements are pre-built in build() (once per level load); the per-frame
+// path only does transform/alpha writes, as before.
 
 import { Container, Graphics, Sprite } from 'pixi.js';
-import { REGION_PALETTES, type RegionId, type RegionPalette } from '../../levels/palettes';
-import { bgVariantFor, col, hashSeed, TAU } from '../core';
+import { REGION_PALETTES, type RegionId } from '../../levels/palettes';
+import { col, hashSeed, mixRGB, TAU } from '../core';
 import { Camera } from '../camera';
 import { TexFactory } from '../textures';
+import { worldThemeFor, themeSunPos, MOTIF_INDEX, type WorldTheme } from '../themes';
 import type { Bounds } from '../camera';
+
+/** '#rrggbb' + '#rrggbb' -> blended '#rrggbb' (theme/region sky blending). */
+function mixHex(a: string, b: string, t: number): string {
+  return `#${mixRGB(col(a), col(b), t).toString(16).padStart(6, '0')}`;
+}
 
 interface DustMote {
   sp: Sprite;
@@ -36,24 +42,22 @@ const BAND_EXTENT = 1.7;
 type StarMode = 'sparse' | 'dense' | 'clustered' | 'streaked';
 
 interface BgVariantCfg {
-  motif: string;
   starMode: StarMode;
-  nebula: boolean;
-  /** Sun distance along its region ray (keeps the light ANGLE — and thus the
-   *  baked body terminators — identical; only apparent height/size changes). */
+  /** Sun glow slide along the theme's light ray (angle never changes, so the
+   *  baked body terminators stay honest — only apparent height/size moves). */
   sunDist: number;
   /** Sun glow size multiplier. */
   sunScale: number;
 }
 
-/** The 6 archetypes. Full-tier star counts; 'lite' halves them. */
-const VARIANT_CFG: readonly BgVariantCfg[] = [
-  { motif: 'celestial arches',   starMode: 'dense',     nebula: false, sunDist: 1.0,  sunScale: 1.0 },
-  { motif: 'wreck debris ring',  starMode: 'clustered', nebula: true,  sunDist: 0.86, sunScale: 1.25 },
-  { motif: 'crystal spires',     starMode: 'sparse',    nebula: false, sunDist: 0.72, sunScale: 0.85 },
-  { motif: 'planet horizon',     starMode: 'sparse',    nebula: true,  sunDist: 0.6,  sunScale: 1.55 },
-  { motif: 'aurora curtains',    starMode: 'dense',     nebula: true,  sunDist: 0.92, sunScale: 1.1 },
-  { motif: 'megastructure grid', starMode: 'streaked',  nebula: false, sunDist: 0.8,  sunScale: 0.95 },
+/** Per-archetype composition cfg, indexed by MOTIF_INDEX. Lite halves stars. */
+const MOTIF_CFG: readonly BgVariantCfg[] = [
+  { starMode: 'dense',     sunDist: 1.0,  sunScale: 1.0 },  // arches
+  { starMode: 'clustered', sunDist: 0.86, sunScale: 1.25 }, // wreck ring
+  { starMode: 'sparse',    sunDist: 0.72, sunScale: 0.85 }, // crystal spires
+  { starMode: 'sparse',    sunDist: 0.6,  sunScale: 1.55 }, // planet horizon
+  { starMode: 'dense',     sunDist: 0.92, sunScale: 1.1 },  // aurora curtains
+  { starMode: 'streaked',  sunDist: 0.8,  sunScale: 0.95 }, // megastructure grid
 ];
 
 const STAR_COUNT: Record<StarMode, number> = {
@@ -62,19 +66,6 @@ const STAR_COUNT: Record<StarMode, number> = {
   clustered: 96,
   streaked: 60,
 };
-
-/**
- * World-space position of the region sun (the single key light, §9). Shared
- * with the bodies layer so baked terminators face the actual light source.
- */
-export function regionSun(region: RegionId, b: Bounds): { x: number; y: number } {
-  const sunAngle = [-1.15, -0.35, -2.05, -1.5][region - 1];
-  const sd = 0.82; // sit just inside the framing so the glow overlaps play
-  return {
-    x: b.cx + Math.cos(sunAngle) * b.rx * sd,
-    y: b.cy + Math.sin(sunAngle) * b.ry * sd,
-  };
-}
 
 export class BackgroundLayer {
   readonly container = new Container();
@@ -91,7 +82,6 @@ export class BackgroundLayer {
   private starSpds: number[] = []; // per-star twinkle speed (beauty pass)
 
   private bounds: Bounds = { cx: 0, cy: 0, rx: 800, ry: 600 };
-  private palette: RegionPalette = REGION_PALETTES[1];
   private variant = 0;
   private sunX = 0;
   private sunY = 0;
@@ -110,15 +100,19 @@ export class BackgroundLayer {
     this.sunCore.blendMode = 'add';
   }
 
-  /** Build everything region+variant dependent. Called on level load. */
-  build(region: RegionId, bounds: Bounds, levelId = ''): void {
+  /**
+   * Build everything theme+motif dependent. Called on level load. `region`
+   * feeds only a faint ~10% sky base influence — the world identity comes
+   * from the curated theme table.
+   */
+  build(levelId: string, region: RegionId, bounds: Bounds): void {
     this.bounds = bounds;
-    this.palette = REGION_PALETTES[region];
-    this.variant = bgVariantFor(levelId);
-    const cfg = VARIANT_CFG[this.variant];
-    const p = this.palette;
+    const theme = worldThemeFor(levelId);
+    this.variant = MOTIF_INDEX[theme.silhouetteMotif];
+    const cfg = MOTIF_CFG[this.variant];
+    const regionBase = REGION_PALETTES[region];
 
-    // One seeded RNG for the whole build — mixed with the variant and level id
+    // One seeded RNG for the whole build — mixed with the motif and level id
     // so the same archetype still lays out slightly differently per level.
     let sr = (1234567 ^ hashSeed(`${levelId}|v${this.variant}`)) >>> 0;
     const rnd = (): number => {
@@ -126,28 +120,32 @@ export class BackgroundLayer {
       return sr / 4294967296;
     };
 
-    // sky (texture swapped; sprite stretched on resize)
-    this.sky.texture = this.tex.sky(p.sky[0], p.sky[1]);
+    // sky — theme gradient with a faint region base underneath
+    this.sky.texture = this.tex.sky(
+      mixHex(theme.skyTop, regionBase.sky[0], 0.1),
+      mixHex(theme.skyBottom, regionBase.sky[1], 0.12),
+    );
 
-    // region sun — a fixed world-space key light. The angle per region is
-    // preserved (bodies bake light from this direction via regionSun); the
-    // variant only slides the sun ALONG its ray (apparent height) and scales
-    // the glow (apparent size), never the direction.
-    const sun = regionSun(region, bounds);
+    // world sun — a fixed world-space key light. The angle comes from the
+    // theme's sunSide (bodies bake light from this exact direction via
+    // themeSunPos); the motif only slides the sun ALONG its ray (apparent
+    // height) and scales the glow (apparent size), never the direction.
+    const sun = themeSunPos(theme.sunSide, bounds);
     const slide = cfg.sunDist / 0.82; // ratio vs the canonical 0.82 placement
     this.sunX = bounds.cx + (sun.x - bounds.cx) * slide;
     this.sunY = bounds.cy + (sun.y - bounds.cy) * slide;
     this.sunScale = cfg.sunScale;
     this.sunGlow.texture = this.tex.glow(256);
     this.sunCore.texture = this.tex.core(96);
-    this.sunGlow.tint = col(p.sun);
-    this.sunCore.tint = 0xffffff;
+    this.sunGlow.tint = col(theme.sunColor);
+    this.sunCore.tint = mixRGB(col(theme.sunColor), 0xffffff, 0.65);
 
-    // static deco: nebula wash + star streaks ("shimmer layers" — skipped in
-    // lite tier). Built once here; the frame loop moves the container only.
+    // static deco: themed nebula wash (every world — full tier) + star streaks
+    // for the 'streaked' motif. Built once here; the frame loop moves the
+    // container only.
     this.deco.removeChildren().forEach((c) => c.destroy());
-    if (cfg.nebula && this.quality === 'full') this.buildNebula(bounds, rnd);
-    if (cfg.starMode === 'streaked' && this.quality === 'full') this.buildStreaks(bounds, rnd);
+    if (this.quality === 'full') this.buildNebula(bounds, rnd, theme);
+    if (cfg.starMode === 'streaked' && this.quality === 'full') this.buildStreaks(bounds, rnd, theme);
 
     // starfield (world-anchored, tiny parallax) — character per archetype
     this.stars.removeChildren();
@@ -186,24 +184,28 @@ export class BackgroundLayer {
       this.starBase.push(x, y);
       s.scale.set(0.08 + rnd() * 0.22);
       s.alpha = 0.25 + rnd() * 0.5;
-      s.tint = 0xffffff;
+      // stars carry a whisper of the world accent — per-world starlight
+      s.tint = mixRGB(0xffffff, col(theme.accentTint), 0.3);
       this.stars.addChild(s);
       this.starSprites.push(s);
       this.starPhases.push(rnd() * TAU);
       this.starSpds.push(0.55 + rnd() * 0.9); // gentle speed variance per star
     }
 
-    // silhouette bands — hand-authored per ARCHETYPE (palette gives the color)
+    // silhouette bands — hand-authored per ARCHETYPE; the tint derives from
+    // the theme (accent hue pulled toward the sky, mid band darker than far)
+    // so the whole depth stack reads as one world.
     this.bandFar.removeChildren().forEach((c) => c.destroy());
     this.bandMid.removeChildren().forEach((c) => c.destroy());
     const farG = buildVariantBand(this.variant, true, bounds, hashSeed(`${levelId}|far`));
     const midG = buildVariantBand(this.variant, false, bounds, hashSeed(`${levelId}|mid`));
-    farG.tint = col(p.far);
-    midG.tint = col(p.mid);
+    const bandBase = mixRGB(col(theme.accentTint), col(theme.skyBottom), 0.5);
+    farG.tint = mixRGB(bandBase, 0x000000, 0.35);
+    midG.tint = mixRGB(bandBase, 0x000000, 0.55);
     this.bandFar.addChild(farG);
     this.bandMid.addChild(midG);
 
-    // ambient dust
+    // ambient dust — themed motes, slightly brighter than before
     for (const d of this.dust) d.sp.destroy();
     this.dust.length = 0;
     const dustTex = this.tex.glow(32);
@@ -211,8 +213,8 @@ export class BackgroundLayer {
     for (let i = 0; i < dustCount; i++) {
       const sp = new Sprite(dustTex);
       sp.anchor.set(0.5);
-      sp.tint = col(p.dust);
-      sp.alpha = 0.1 + rnd() * 0.16;
+      sp.tint = col(theme.dustColor);
+      sp.alpha = 0.14 + rnd() * 0.18;
       sp.scale.set(0.1 + rnd() * 0.3);
       this.container.addChild(sp);
       this.dust.push({
@@ -226,33 +228,39 @@ export class BackgroundLayer {
     }
   }
 
-  /** 3 large additive fog glows behind the stars. Alphas stay low (<= 0.18)
-   *  and biased off-center so the lit green pad always stays dominant. */
-  private buildNebula(b: Bounds, rnd: () => number): void {
-    const p = this.palette;
-    const tints = [col(p.fog), col(p.accent), col(p.far)];
+  /**
+   * Themed additive fog glows behind the stars — EVERY world gets its wash now
+   * (the old <=0.18 occasional fog is gone). Blob alphas derive from the
+   * theme's 0.25..0.4 band (middle blob dimmest), biased off-center so the lit
+   * green pad stays the brightest warm landmark on screen.
+   */
+  private buildNebula(b: Bounds, rnd: () => number, theme: WorldTheme): void {
+    const hues = theme.nebulaColors;
+    const t = theme.nebulaAlpha;
+    const alphas = [t * 0.85, t * 0.55, t]; // accent-ish middle stays dimmest
     const tex = this.tex.glow(256);
     for (let i = 0; i < 3; i++) {
       const sp = new Sprite(tex);
       sp.anchor.set(0.5);
       sp.blendMode = 'add';
-      // off-center bias: keep |offset| >= 0.25 half-extents from the middle
-      const ox = (0.25 + rnd() * 0.75) * (rnd() > 0.5 ? 1 : -1);
-      const oy = (0.2 + rnd() * 0.8) * (rnd() > 0.5 ? 1 : -1);
+      // off-center bias: keep |offset| >= 0.3 half-extents from the middle
+      const ox = (0.3 + rnd() * 0.7) * (rnd() > 0.5 ? 1 : -1);
+      const oy = (0.25 + rnd() * 0.75) * (rnd() > 0.5 ? 1 : -1);
       sp.x = b.cx + ox * b.rx;
       sp.y = b.cy + oy * b.ry;
       const size = b.rx * (0.9 + rnd() * 0.6);
       sp.width = size;
       sp.height = size * (0.7 + rnd() * 0.5);
-      sp.alpha = i === 1 ? 0.1 : 0.16; // accent tint dimmest (readability)
-      sp.tint = tints[i];
+      sp.alpha = alphas[i];
+      sp.tint = col(hues[i % hues.length]);
       this.deco.addChild(sp);
     }
   }
 
   /** Cometary stream: long thin streak sprites for the 'streaked' sky. */
-  private buildStreaks(b: Bounds, rnd: () => number): void {
+  private buildStreaks(b: Bounds, rnd: () => number, theme: WorldTheme): void {
     const tex = this.tex.streak(64, 10);
+    const tint = mixRGB(0xffffff, col(theme.accentTint), 0.4);
     for (let i = 0; i < 7; i++) {
       const sp = new Sprite(tex);
       sp.anchor.set(0.5);
@@ -262,7 +270,7 @@ export class BackgroundLayer {
       sp.width = b.rx * (0.1 + rnd() * 0.14);
       sp.height = 3 + rnd() * 3;
       sp.alpha = 0.16 + rnd() * 0.18;
-      sp.tint = 0xffffff;
+      sp.tint = tint;
       this.deco.addChild(sp);
     }
   }
@@ -309,8 +317,8 @@ export class BackgroundLayer {
     this.sunGlow.height = glowSize;
     this.sunCore.width = glowSize * 0.16;
     this.sunCore.height = glowSize * 0.16;
-    this.sunGlow.alpha = 0.5;
-    this.sunCore.alpha = 0.9;
+    this.sunGlow.alpha = 0.62; // brighter key light (full-scene grade up)
+    this.sunCore.alpha = 0.95;
 
     // static deco (nebula + streaks): one transform write for the whole set
     this.placeDeco(this.deco, 0.1, b, sc);

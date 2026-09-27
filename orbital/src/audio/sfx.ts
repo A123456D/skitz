@@ -83,8 +83,10 @@ export function hiss(
 
 function sLaunch(v: SfxVoice, c: SfxCore, t: number, k: number): void {
   // Filtered noise sweep up — compressed-air launch, energy rising with the shot.
-  hiss(v, c, t, 0.42, 0.34 * k, 'bandpass', 260, 2600, 1.1);
-  tone(v, c.ctx, 'sine', 110, 300, t, 0.4, 0.07 * k);
+  // Pace pass: near-instant attack and a brighter top to the sweep so the hit
+  // lands as a crack, not a swell.
+  hiss(v, c, t, 0.36, 0.36 * k, 'bandpass', 320, 3600, 1.0, 0.002);
+  tone(v, c.ctx, 'sine', 150, 380, t, 0.34, 0.08 * k, 0.002);
 }
 
 function sBounce(v: SfxVoice, c: SfxCore, t: number, k: number, p: number): void {
@@ -108,19 +110,20 @@ function sHazard(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 function sSink(v: SfxVoice, c: SfxCore, t: number, k: number): void {
   // THE payoff, staged: (1) thoom — the cup swallows the ball, sub body decays
   // under it; (2) rising C-major fanfare with a top-octave sparkle; then a soft
-  // cymbal-ish noise tail for air. Arp gains stay modest so the master
-  // compressor doesn't pump when the chord lands on the thoom's tail.
-  tone(v, c.ctx, 'sine', 84, 36, t, 0.75, 0.5 * k);
-  tone(v, c.ctx, 'sine', 42, 30, t, 0.9, 0.22 * k); // octave-down body
-  hiss(v, c, t, 0.5, 0.16 * k, 'lowpass', 240, 90, 0.7, 0.03);
+  // cymbal-ish noise tail for air. Pace pass: everything tightened so the whole
+  // fanfare lands inside ~1.1 s — arp enters earlier and the tail is halved.
+  // Arp gains stay modest so the master compressor doesn't pump on the thoom.
+  tone(v, c.ctx, 'sine', 84, 36, t, 0.5, 0.5 * k);
+  tone(v, c.ctx, 'sine', 42, 30, t, 0.6, 0.22 * k); // octave-down body
+  hiss(v, c, t, 0.32, 0.16 * k, 'lowpass', 240, 90, 0.7, 0.02);
   const arp = [523.25, 659.26, 783.99, 1046.5]; // C5 E5 G5 C6
   for (let i = 0; i < arp.length; i++) {
-    tone(v, c.ctx, 'triangle', arp[i], null, t + 0.3 + i * 0.12, 0.55, (i === 3 ? 0.1 : 0.13) * k, 0.006);
+    tone(v, c.ctx, 'triangle', arp[i], null, t + 0.16 + i * 0.07, 0.32, (i === 3 ? 0.1 : 0.13) * k, 0.005);
   }
-  // Cymbal tail: bright noise that swells slowly and darkens as it decays
-  // (highpass sweeps down) — brushed shimmer, not a static burst. Pure fade-in
-  // attack ramp means it can never click.
-  hiss(v, c, t + 0.3, 1.7, 0.055 * k, 'highpass', 5200, 2600, 0.7, 0.35);
+  // Cymbal tail: bright noise that swells and darkens as it decays (highpass
+  // sweeps down) — brushed shimmer, not a static burst. Pure fade-in attack
+  // ramp means it can never click.
+  hiss(v, c, t + 0.16, 0.9, 0.055 * k, 'highpass', 5200, 2600, 0.7, 0.12);
 }
 
 function sLipout(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -201,13 +204,14 @@ function sWormhole(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 function sUiTick(v: SfxVoice, c: SfxCore, t: number, k: number): void {
   // Softer + slightly lower than before: ticks fire on every slider move, and
   // at 1900 Hz/0.09 they stacked into a harsh fizz while dragging on touch.
-  tone(v, c.ctx, 'sine', 1650, null, t, 0.03, 0.05 * k, 0.002);
+  // Pace pass: envelope 15% shorter (0.03 → 0.026).
+  tone(v, c.ctx, 'sine', 1650, null, t, 0.026, 0.05 * k, 0.002);
 }
 
 function sUiSelect(v: SfxVoice, c: SfxCore, t: number, k: number): void {
-  // Tee 'tak' — a click plus a short woody body.
-  hiss(v, c, t, 0.02, 0.14 * k, 'highpass', 2400, null);
-  tone(v, c.ctx, 'sine', 340, 290, t, 0.07, 0.18 * k, 0.002);
+  // Tee 'tak' — a click plus a short woody body (envelopes 15% shorter).
+  hiss(v, c, t, 0.017, 0.14 * k, 'highpass', 2400, null);
+  tone(v, c.ctx, 'sine', 340, 290, t, 0.06, 0.18 * k, 0.002);
 }
 
 function sMiloChirp(v: SfxVoice, c: SfxCore, t: number, k: number): void {
@@ -230,10 +234,10 @@ function sAnnouncer(v: SfxVoice, c: SfxCore, t: number, k: number): void {
 
 /** Scheduled envelope lifetime per sfx (seconds) — used for cap bookkeeping. */
 export const SFX_DURATION: Record<SfxName, number> = {
-  launch: 0.5,
+  launch: 0.45,
   bounce: 0.2,
   hazard: 0.4,
-  sink: 2.1, // now spans the cymbal tail (0.3 + 1.7 s) for cap bookkeeping
+  sink: 1.1, // pace pass: whole fanfare (thoom + arp + 0.16+0.9 s cymbal) ≤ ~1.2 s
   lipout: 0.3,
   settled: 0.4,
   voided: 1.05,
@@ -244,8 +248,8 @@ export const SFX_DURATION: Record<SfxName, number> = {
   pinPlace: 0.6,
   pinDeny: 0.25,
   wormhole: 0.6,
-  uiTick: 0.1,
-  uiSelect: 0.15,
+  uiTick: 0.085,
+  uiSelect: 0.13,
   miloChirp: 0.2,
   announcer: 0.65,
 };

@@ -176,26 +176,27 @@ export class VfxLayer {
     const uy = vy / spd;
     const n = Math.round(12 * this.q());
     for (let i = 0; i < n; i++) {
-      const spread = (i / n - 0.5) * 1.9;
+      const spread = (i / n - 0.5) * 2.2;
       const ca = Math.cos(spread);
       const sa = Math.sin(spread);
       const bx = -ux * ca - uy * sa; // cone behind the launch
       const by = -ux * sa + uy * ca;
-      const sp = 90 + Math.random() * 160;
-      this.spawn(TEX_GLOW, x, y, bx * sp, by * sp, 0.4 + Math.random() * 0.25,
-        14, 3, GRAVITY, true, 0.85, 0, 2.6);
+      const sp = 150 + Math.random() * 230; // bigger, faster ejecta...
+      this.spawn(TEX_GLOW, x, y, bx * sp, by * sp, 0.3 + Math.random() * 0.18, // ...that die quicker
+        22, 6, GRAVITY, true, 0.95, 0, 2.2);
     }
-    // one stretch flash along the launch vector
-    this.spawn(TEX_RING, x + ux * 8, y + uy * 8, 0, 0, 0.28, 26, 58, 0xffffff, true, 0.7);
+    // one stretch flash along the launch vector — bigger, briefer
+    this.spawn(TEX_RING, x + ux * 10, y + uy * 10, 0, 0, 0.24, 36, 92, 0xffffff, true, 0.85);
   }
 
   impactDust(x: number, y: number, nx: number, ny: number, speed: number): void {
     const n = Math.round(clamp(speed / 60, 3, 12) * this.q());
+    const s0 = 7 + speed * 0.02; // spark size scales with impact speed
     for (let i = 0; i < n; i++) {
       const a = Math.atan2(ny, nx) + (Math.random() - 0.5) * 2.1;
-      const sp = 40 + Math.random() * speed * 0.35;
+      const sp = 70 + Math.random() * speed * 0.55;
       this.spawn(TEX_DOT, x, y, Math.cos(a) * sp, Math.sin(a) * sp,
-        0.3 + Math.random() * 0.25, 7, 2.5, 0xcfd8e4, false, 0.65, 60, 2.2);
+        0.22 + Math.random() * 0.16, s0, 3, 0xcfd8e4, false, 0.8, 60, 2.2);
     }
   }
 
@@ -235,8 +236,9 @@ export class VfxLayer {
   }
 
   orbitFlash(x: number, y: number): void {
-    this.spawn(TEX_RING, x, y, 0, 0, 0.5, 30, 150, GRAVITY, true, 0.55);
-    this.spawn(TEX_RING, x, y, 0, 0, 0.7, 20, 100, 0xffffff, true, 0.35);
+    // stronger, shorter — two big rings, same particle budget
+    this.spawn(TEX_RING, x, y, 0, 0, 0.42, 44, 220, GRAVITY, true, 0.8);
+    this.spawn(TEX_RING, x, y, 0, 0, 0.55, 30, 160, 0xffffff, true, 0.55);
   }
 
   wormholeFlash(x: number, y: number): void {

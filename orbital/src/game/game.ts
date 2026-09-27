@@ -447,10 +447,11 @@ class Game {
       this.input.tick(dt);
       // gravity always simulates (moving bodies, pulses, debris) — the world
       // is alive even while aiming; ball physics only matter in flight
-      // sink slow-mo: the last approach to the cup gets a beat to land
+      // pace: the world runs 1.3x real time (Perihelion snap); slow-mo beats scale from it
+      const PACE = 1.3;
       const scale = this.sinkSlowT > 0 ? 0.3 : 1;
       if (this.sinkSlowT > 0) this.sinkSlowT -= dt;
-      this.acc = Math.min(this.acc + dt * scale, 0.25);
+      this.acc = Math.min(this.acc + dt * PACE * scale, 0.3);
       let events: SimEvent[] = [];
       while (this.acc >= STEP_DT) {
         this.acc -= STEP_DT;
@@ -581,7 +582,7 @@ class Game {
       return;
     }
     this.phase = 'strokeEndWait';
-    this.waitT = 0.45;
+    this.waitT = 0.3;
     this.dryStrokes++;
     // leave the shot's path on the course for the next aim phase
     this.renderer.setLastShot(this.lastShot.length > 4 ? this.lastShot.slice() : null);

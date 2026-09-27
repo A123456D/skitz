@@ -558,12 +558,12 @@
 .ob-obj.is-done { color: var(--ink); }
 .ob-obj.is-done .ob-obj-check { color: var(--gravity); }
 
-/* minimal during flight */
+/* minimal during flight — pace pass: fades faster and recedes further */
 .ob-hud.is-flight .ob-pins,
 .ob-hud.is-flight .ob-objectives,
 .ob-hud.is-flight .ob-frags,
-.ob-hud.is-flight .ob-boost { opacity: 0.22; transition: opacity 0.4s; }
-.ob-pins, .ob-objectives, .ob-frags { transition: opacity 0.4s; }
+.ob-hud.is-flight .ob-boost { opacity: 0.12; transition: opacity 0.22s; }
+.ob-pins, .ob-objectives, .ob-frags { transition: opacity 0.3s; }
 
 /* ------------------------------------------------------------------ PAUSE */
 
@@ -611,6 +611,13 @@
   border-radius: 16px;
   pointer-events: auto;
   scrollbar-width: thin;
+}
+/* Entrance — replays every time the results screen activates (display:none →
+   flex restarts child animations). 250 ms pace-pass envelope, ease-out. */
+.ob-results.is-active .ob-card { animation: ob-card-in 250ms var(--ob-ease); }
+@keyframes ob-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .ob-card-head {
   display: flex;
@@ -874,20 +881,20 @@
   background: var(--panel);
   border: 1px solid var(--ob-line);
   border-radius: 999px;
-  animation: ob-toast 1.9s var(--ob-ease) forwards;
+  animation: ob-toast 1.5s var(--ob-ease) forwards;
 }
 .ob-toast--good { border-color: rgba(111, 214, 232, 0.55); color: var(--gravity); }
 .ob-toast--bad { border-color: rgba(255, 93, 71, 0.55); color: var(--danger); }
 .ob-toast--neutral { color: var(--muted); }
 @keyframes ob-toast {
   0% { opacity: 0; transform: translateY(-10px); }
-  12%, 76% { opacity: 1; transform: translateY(0); }
+  14%, 74% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-6px); }
 }
 
 /* -------------------------------------------------------------- LEVEL PILL
    Fresh-level announce. One CSS animation drives the whole envelope:
-   500ms fade+rise in, ~2.2s hold, fade out (transform+opacity only). */
+   400ms fade+rise in, ~1.7s hold, fade out (transform+opacity only). */
 .ob-levelpill {
   position: absolute;
   top: calc(14px + env(safe-area-inset-top));
@@ -908,11 +915,11 @@
   opacity: 0;
   pointer-events: none;
 }
-.ob-levelpill.is-in { animation: ob-levelpill 3.1s var(--ob-ease) forwards; }
+.ob-levelpill.is-in { animation: ob-levelpill 2.4s var(--ob-ease) forwards; }
 @keyframes ob-levelpill {
   0%    { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-  16.1% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* 0.5s in */
-  87.1% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* +2.2s hold */
+  16.7% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* 0.4s in */
+  87.5% { opacity: 1; transform: translateX(-50%) translateY(0); }   /* +1.7s hold */
   100%  { opacity: 0; transform: translateX(-50%) translateY(-4px); }
 }
 
@@ -931,7 +938,7 @@
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.3s var(--ob-ease), visibility 0.3s;
+  transition: opacity 0.21s var(--ob-ease), visibility 0.21s;
 }
 .ob-tut.is-on { opacity: 1; visibility: visible; }
 .ob-tut-card {
@@ -966,7 +973,7 @@
   height: 4px;
   border-radius: 2px;
   background: rgba(139, 147, 167, 0.28);
-  transition: background 0.2s;
+  transition: background 0.14s;
 }
 .ob-tut-dots i.is-on { background: var(--accent); }
 .ob-tut-foot {
@@ -1032,7 +1039,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ob-stars i, .ob-ring--b, .ob-toast, .ob-levelpill { animation: none; }
+  .ob-stars i, .ob-ring--b, .ob-toast, .ob-levelpill, .ob-results .ob-card { animation: none; }
   .ob-root * { transition-duration: 0.01ms !important; }
 }
 

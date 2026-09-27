@@ -367,10 +367,10 @@ export class MiloLayer {
         sp.y = (y0 + y1) * 0.5;
         sp.rotation = Math.atan2(dy, dx);
         sp.width = Math.max(6, d);
-        sp.height = 3.4 * zoomComp; // ribbon keeps up with the ball's zoom lift
+        sp.height = 4.8 * zoomComp; // ribbon keeps up with the ball's zoom lift
         const age = 1 - i / TRAIL_N;
         sp.tint = speedRamp(this.tSpd[i] / MAX_LAUNCH_SPEED);
-        sp.alpha = 0.5 * age * age;
+        sp.alpha = 0.6 * age * age;
       }
     } else {
       for (let i = 0; i < TRAIL_N - 1; i++) {
