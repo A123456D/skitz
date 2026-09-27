@@ -18,6 +18,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { cloudTexture, groundAlbedo, groundBump } from './textures';
 import type { MiloMood, OrbitalRenderer, PinGhost } from '../render/api';
 import type { PredPoint, SimEvent, World } from '../sim';
 import { BALL_R, HOLE_CAPTURE_R } from '../sim';
@@ -426,7 +428,13 @@ export class Renderer3D implements OrbitalRenderer {
     const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
+    // filmic response — richer contrast than linear, kind to the teal palette
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.toneMappingExposure = 1.32;
     r.setClearColor(0x04100f, 1);
+    // PBR ambience: a soft studio env gives metal/ice/crystal real reflections
+    const pmrem = new THREE.PMREMGenerator(r);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.06).texture;
     const cv = r.domElement;
     cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
     host.appendChild(cv);
@@ -640,8 +648,7 @@ export class Renderer3D implements OrbitalRenderer {
     // --- lights
     const hemi = new THREE.HemisphereLight(col(theme.skyTop), col(theme.skyBottom), 0.85);
     this.worldGroup.add(hemi);
-    const sunLight = new THREE.DirectionalLight(col(theme.sunColor), 2.2);
-    sunLight.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.75, sunDir.z).normalize(), 4200));
+    const sunLight = new THREE.DirectionalLight(col(theme.sunColor), 2.2);    sunLight.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.75, sunDir.z).normalize(), 4200));
     sunLight.target.position.set(b.cx, 0, -b.cy);
     sunLight.castShadow = this.quality === 'full';
     const R = Math.max(b.rx, b.ry) * 1.35;
@@ -654,30 +661,35 @@ export class Renderer3D implements OrbitalRenderer {
     sunLight.shadow.mapSize.set(this.quality === 'full' ? 2048 : 1024, this.quality === 'full' ? 2048 : 1024);
     this.worldGroup.add(sunLight, sunLight.target);
 
+    // cool back-light: the unlit limb keeps a whisper of definition
+    const rim = new THREE.DirectionalLight(0x6fd6e8, 0.35);
+    rim.position.copy(px(b.cx, b.cy).addScaledVector(new THREE.Vector3(sunDir.x, 0.5, sunDir.z).normalize(), -3800));
+    this.worldGroup.add(rim);
+
+    // distance fog: the far ground melts into the sky's own horizon color
+    const gR = Math.hypot(b.rx, b.ry) * 1.6;
+    this.scene.fog = new THREE.Fog(new THREE.Color(col(theme.skyBottom)).multiplyScalar(0.85), gR * 0.62, gR * 2.1);
+
     // --- sky dome + stars + nebula + sun glow
     this.buildSky(w, theme, sunDir);
 
-    // --- the plane: the icon's teal space as a floor — lighter mid, dark rim.
-    // Self-lit (emissive) because the theme palette is deliberately deep-dark;
-    // the 2D view lifts its midtones with additive glows and we do it here.
-    const gR = Math.hypot(b.rx, b.ry) * 1.6;
-    const lift = (hex: string, f: number): string => {
-      const c = col(hex);
-      const r = Math.min(255, Math.round(((c >> 16) & 255) * f));
-      const g2 = Math.min(255, Math.round(((c >> 8) & 255) * f));
-      const b2 = Math.min(255, Math.round((c & 255) * f));
-      return `rgba(${r},${g2},${b2},1)`;
-    };
-    const groundTex = radialTexture(lift(theme.skyTop, 1.55), lift(theme.skyBottom, 1.15), 512);
+    // --- the plane: displaced noise terrain — flat where you play, duned rims
+    // melting into the fog, albedo + bump from the procedural field
+    const albedo = groundAlbedo(theme.skyTop, theme.skyBottom, w.def.id);
+    albedo.repeat.set(3, 3);
+    const bump = groundBump(w.def.id);
+    bump.repeat.set(3, 3);
+    const size = gR * 2.3;
     const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(gR, 72),
+      new THREE.PlaneGeometry(size, size, 120, 120),
       new THREE.MeshStandardMaterial({
-        map: groundTex, roughness: 1,
-        emissive: 0xffffff, emissiveMap: groundTex, emissiveIntensity: 0.45,
+        map: albedo, bumpMap: bump, bumpScale: 16,
+        roughness: 1, envMapIntensity: 0.15,
       }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(b.cx, -0.5, -b.cy);
+    this.displaceRim(ground, b, (hashSeed(w.def.id) % 628) / 100);
     ground.receiveShadow = true;
     this.worldGroup.add(ground);
 
@@ -747,7 +759,7 @@ export class Renderer3D implements OrbitalRenderer {
     // --- Milo
     this.miloMesh = new THREE.Mesh(
       new THREE.SphereGeometry(BALL_R, this.quality === 'full' ? 32 : 16, this.quality === 'full' ? 24 : 12),
-      new THREE.MeshStandardMaterial({ color: 0xf2f6f8, roughness: 0.25, metalness: 0.05 }),
+      new THREE.MeshStandardMaterial({ color: 0xf2f6f8, roughness: 0.22, metalness: 0.08, envMapIntensity: 0.8 }),
     );
     this.miloMesh.castShadow = true;
     const blobTex = radialTexture('rgba(2,16,14,0.55)', 'rgba(2,16,14,0)');
@@ -760,6 +772,29 @@ export class Renderer3D implements OrbitalRenderer {
     this.milo.add(this.miloMesh, this.contactBlob);
 
     this.fitCamera(w.def.bounds);
+  }
+
+  /** Rim displacement: the play field stays flat; beyond it the terrain rises
+   *  into layered dunes so the table sits IN a landscape, not ON a plate. */
+  private displaceRim(ground: THREE.Mesh, b: World['def']['bounds'], seed: number): void {
+    const pos = ground.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const playR = Math.max(b.rx, b.ry) * 1.12;
+    const rimR = Math.max(b.rx, b.ry) * 1.5;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const d = Math.hypot(x, y);
+      const edge = clamp((d - playR) / (rimR - playR), 0, 1);
+      if (edge <= 0) continue;
+      const e = edge * edge * (3 - 2 * edge);
+      const h =
+        Math.sin(x * 0.0021 + seed) * 34 +
+        Math.sin(y * 0.0024 + seed * 1.7) * 30 +
+        Math.sin((x + y) * 0.0013 + seed * 2.3) * 46 +
+        Math.sin(x * 0.006 + y * 0.005 + seed * 3.1) * 12;
+      pos.setZ(i, h * e + e * 26);
+    }
+    ground.geometry.computeVertexNormals();
   }
 
   /** Ground furniture per silhouette archetype: grid, arcs, craters, bands. */
@@ -875,28 +910,28 @@ export class Renderer3D implements OrbitalRenderer {
       sg.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
       const stars = new THREE.Points(sg, new THREE.PointsMaterial({
         size: 140, vertexColors: true, transparent: true, opacity: 0.9,
-        blending: THREE.AdditiveBlending, depthWrite: false,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
       }));
       this.starLayers.push(stars);
       this.worldGroup.add(stars);
     }
 
-    // nebula blobs — additive, theme hues, kept under the pad's brightness
+    // nebula blobs — layered cloud fields, theme hues, far side of the fog
     theme.nebulaColors.forEach((nc, i) => {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: blobTexture(nc), transparent: true, opacity: theme.nebulaAlpha * 0.55,
-        blending: THREE.AdditiveBlending, depthWrite: false,
+        map: cloudTexture(nc, w.def.id + ':neb' + i), transparent: true, opacity: theme.nebulaAlpha * 0.8,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
       }));
       const a = (i / theme.nebulaColors.length) * Math.PI * 2 + b.cx;
       sp.position.set(center.x + Math.cos(a) * 26000, 9000 + i * 2600, center.z + Math.sin(a) * 26000);
-      sp.scale.setScalar(22000 + i * 5200);
+      sp.scale.set(30000 + i * 7000, 18000 + i * 4200, 1);
       this.worldGroup.add(sp);
     });
 
     // the sun itself — a far billboard along the key-light direction
     const sunSp = new THREE.Sprite(new THREE.SpriteMaterial({
       map: blobTexture(theme.sunColor), transparent: true, opacity: 0.85,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
     }));
     sunSp.position.copy(center).addScaledVector(new THREE.Vector3(sunDir.x, 0.55, sunDir.z).normalize(), 38000);
     sunSp.scale.setScalar(9000);
@@ -923,7 +958,7 @@ export class Renderer3D implements OrbitalRenderer {
       new THREE.RingGeometry(hSize * 0.985, hSize * 1.01, 48),
       new THREE.MeshBasicMaterial({
         color: col(theme.accentTint), transparent: true, opacity: 0.5,
-        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, fog: false,
       }),
     );
     horizon.add(disc, limb);
@@ -932,7 +967,7 @@ export class Renderer3D implements OrbitalRenderer {
         new THREE.RingGeometry(hSize * 1.22, hSize * 1.38, 56),
         new THREE.MeshBasicMaterial({
           color: col(theme.sunColor), transparent: true, opacity: 0.22,
-          side: THREE.DoubleSide, depthWrite: false,
+          side: THREE.DoubleSide, depthWrite: false, fog: false,
         }),
       );
       ring.rotation.x = 0.35 + (levelHash % 7) / 20;
@@ -954,7 +989,7 @@ export class Renderer3D implements OrbitalRenderer {
           new THREE.MeshBasicMaterial({
             color: col(theme.nebulaColors[i % theme.nebulaColors.length]),
             transparent: true, opacity: 0.055,
-            blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false,
+            blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, fog: false,
           }),
         );
         const ra = hBearing + 1.2 + i * 1.5;
@@ -1013,9 +1048,12 @@ export class Renderer3D implements OrbitalRenderer {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: tex ?? undefined,
+      bumpMap: tex ?? null,
+      bumpScale: 0.9,
       roughness: look.rough,
       metalness: look.metal,
       flatShading: isCrystal,
+      envMapIntensity: 0.35,
     });
     if (bd.kind === 'unstable') {
       mat.emissive = new THREE.Color(0xffd9a0);
