@@ -20,7 +20,7 @@ export const STEP_DT = 1 / 60;
 export const BALL_R = 10;
 export const RESTITUTION = 0.55;
 export const TANGENT_DAMP = 0.92;
-export const SINK_SPEED = 340;
+export const SINK_SPEED = 400;
 export const SETTLE_SPEED = 8;
 export const SETTLE_TIME = 1.2;
 export const BOUNDS_GRACE = 1.5;
@@ -30,8 +30,8 @@ export const MAX_LAUNCH_SPEED = 900;
 export const HOLE_CAPTURE_R = 30;
 export const BOOST_IMPULSE = 200;
 /** Cup funnel: slow balls near the cup get curled in — real cups hold the ball. */
-export const CUP_FUNNEL_R_MULT = 1.8;
-export const CUP_FUNNEL_A = 90;
+export const CUP_FUNNEL_R_MULT = 2.4;
+export const CUP_FUNNEL_A = 110;
 
 const f1: FieldSample = makeFieldSample();
 const f2: FieldSample = makeFieldSample();
@@ -452,6 +452,16 @@ export function stepTick(w: World, ghost = false): void {
   ball.vx += 0.5 * (f1.ax + f2.ax) * STEP_DT;
   ball.vy += 0.5 * (f1.ay + f2.ay) * STEP_DT;
 
+  // aether drag: in empty space (no dominant gravity) the ball bleeds speed —
+  // missed shots settle mid-course for a recovery lie instead of drifting to
+  // the void forever. Inside a body's influence there is NO drag, so orbits
+  // keep their energy and capture holes play pure.
+  if (f2.dominant === null) {
+    const drag = Math.exp(-0.3 * STEP_DT);
+    ball.vx *= drag;
+    ball.vy *= drag;
+  }
+
   collideBodies(w, ghost);
   if (!ball.dead) collideHazards(w, ghost);
 
@@ -551,13 +561,16 @@ export function stepTick(w: World, ghost = false): void {
   // hole
   if (!ball.dead) {
     const hd = Math.hypot(ball.x - w.holeX, ball.y - w.holeY);
-    const capture = w.def.hole.captureR ?? HOLE_CAPTURE_R;
+    // struggle assist widens both the capture and the funnel — a player on a
+    // dry streak gets a subtly more forgiving cup, never told, never shown
+    const assistMul = 1 + 0.6 * (w.assist ?? 0);
+    const capture = (w.def.hole.captureR ?? HOLE_CAPTURE_R) * assistMul;
     // funnel: gentle pull toward the cup, strongest at the rim, zero at the edge.
     // Slow misses curl in, lip-riders trickle in; fast rattle-outs outrun it.
     const funnelR = capture * CUP_FUNNEL_R_MULT;
     if (hd < funnelR && hd > 1) {
       const t = 1 - hd / funnelR;
-      const a = CUP_FUNNEL_A * t * t * (3 - 2 * t) * w.gravityScale;
+      const a = CUP_FUNNEL_A * assistMul * t * t * (3 - 2 * t) * w.gravityScale;
       ball.vx += ((w.holeX - ball.x) / hd) * a * STEP_DT;
       ball.vy += ((w.holeY - ball.y) / hd) * a * STEP_DT;
     }
@@ -634,8 +647,11 @@ export function stepTick(w: World, ghost = false): void {
     ball.outOfBoundsT = 0;
   }
 
-  // settle
-  if (Math.hypot(ball.vx, ball.vy) < SETTLE_SPEED) {
+  // settle — but never on the lip: inside the cup's funnel the pull is still
+  // working, so a crawling ball always resolves (in, or rattled out) first
+  const hdCup = Math.hypot(ball.x - w.holeX, ball.y - w.holeY);
+  const onLip = hdCup < (w.def.hole.captureR ?? HOLE_CAPTURE_R) * CUP_FUNNEL_R_MULT * (1 + 0.6 * (w.assist ?? 0));
+  if (Math.hypot(ball.vx, ball.vy) < SETTLE_SPEED && !onLip) {
     ball.slowTime += STEP_DT;
     if (ball.slowTime > SETTLE_TIME) {
       ball.settled = true;

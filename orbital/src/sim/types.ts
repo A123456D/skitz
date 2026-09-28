@@ -287,6 +287,9 @@ export interface World {
   holeY: number;
   holeT: number;
   holeDir: 1 | -1;
+  /** Struggle assist 0..1: widens capture + funnel silently (game sets it
+   *  from the dry-stroke count). Prediction snapshots it like any field. */
+  assist?: number;
   holeSegLens: number[] | null;
   holeSegTotal: number;
   strokes: number;

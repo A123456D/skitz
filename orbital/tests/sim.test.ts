@@ -109,7 +109,7 @@ describe('gravity pins', () => {
     const def = baseLevel({ pinBudget: 1 });
     const w1 = createWorld(def, 3);
     startStroke(w1);
-    launch(w1, 1, 0, 200);
+    launch(w1, 1, 0, 320); // brisk: aether drag bleeds speed across the void
     let yBase = 300;
     for (let i = 0; i < 500; i++) {
       stepTick(w1);
@@ -120,7 +120,7 @@ describe('gravity pins', () => {
     expect(placePin(w2, 700, 180)).toBe(true);
     expect(placePin(w2, 300, 400)).toBe(false); // budget 1
     expect(drainEvents(w2).some((e) => e.type === 'pinDeny')).toBe(true);
-    launch(w2, 1, 0, 200);
+    launch(w2, 1, 0, 320);
     let yPin = 300;
     for (let i = 0; i < 500; i++) {
       stepTick(w2);
@@ -144,17 +144,17 @@ describe('gravity pins', () => {
 
 describe('hole', () => {
   it('sinks slow entries and lip-outs fast ones', () => {
-    const def = baseLevel({ hole: { x: 900, y: 300 } });
+    const def = baseLevel({ hole: { x: 700, y: 300 } }); // inside a soft shot's drag range
     const slow = createWorld(def, 1);
     startStroke(slow);
     launch(slow, 1, 0, 200);
-    const evSlow = run(slow, 8);
+    const evSlow = run(slow, 10);
     expect(slow.strokeEnded).toBe('sunk');
     expect(evSlow.some((e) => e.type === 'sink')).toBe(true);
 
     const fast = createWorld(def, 1);
     startStroke(fast);
-    launch(fast, 1, 0, 450);
+    launch(fast, 1, 0, 700); // arrives above SINK_SPEED even after aether drag
     const evFast = run(fast, 8);
     expect(evFast.some((e) => e.type === 'lipout')).toBe(true);
     expect(fast.strokeEnded).not.toBe('sunk');
@@ -272,7 +272,8 @@ describe('zones', () => {
     startStroke(w);
     launch(w, 1, 0, 50);
     for (let i = 0; i < 120; i++) stepTick(w);
-    expect(Math.hypot(w.ball.vx, w.ball.vy)).toBeGreaterThan(350);
+    // aether drag bleeds some speed, but the corridor still accelerates hard
+    expect(Math.hypot(w.ball.vx, w.ball.vy)).toBeGreaterThan(300);
   });
 
   it('flipper zones reverse gravity', () => {
@@ -303,7 +304,10 @@ describe('machinery + debris', () => {
     launch(w, 1, 0, 200);
     for (let i = 0; i < 45; i++) stepTick(w);
     expect(Math.hypot(w.ball.x - 800, w.ball.y - 400)).toBeLessThan(120);
-    expect(Math.hypot(w.ball.vx, w.ball.vy)).toBeCloseTo(200, 0);
+    // the transfer rotates velocity by angleDelta (pi/2): (1,0) becomes (0,1) —
+    // magnitude may bleed to aether drag en route, direction may not
+    expect(Math.abs(w.ball.vx)).toBeLessThan(45);
+    expect(w.ball.vy).toBeGreaterThan(120);
   });
 
   it('debris trips a switch (the cascade)', () => {
@@ -386,7 +390,7 @@ describe('settle + prediction', () => {
     startStroke(w);
     placePin(w, 150, 570); // outside the influence edge — present but inert
     drainEvents(w); // the pinPlace event belongs to the aim phase, not prediction
-    const res = predict(w, 200, 0, 6);
+    const res = predict(w, 300, 0, 6); // brisk enough to sink inside the horizon after drag
     expect(res.points.length).toBeGreaterThan(10);
     expect(res.end).toBe('sunk');
     expect(w.ball.x).toBe(def.tee.x);

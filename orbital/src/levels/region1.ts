@@ -14,29 +14,25 @@ export const R1_LEVELS: LevelDef[] = [
     name: 'First Contact',
     region: 1,
     concept:
-      'THE BEND, made geometric: Asterion sits square on the flat lane, so straight is death. ' +
-      'The only fairway is the wide arc — aim past the planet and let its pull swing you down onto ' +
-      'the green, while the little vigil moon beyond swallows anything hit too hard.',
+      'THE PUTT: no planets between Milo and the green. Drag back, watch the dotted arc end on the ' +
+      'cup, let go. That is the whole game — every hole after this one is just weather on top of it. ' +
+      'A little moon drifts far below the lane as a promise of what weather will look like.',
     par: 2,
     pinBudget: 2,
-    tee: { x: 260, y: 720 },
-    hole: { x: 2020, y: 660 },
-    bounds: { cx: 1140, cy: 640, rx: 1600, ry: 560 },
+    tee: { x: 260, y: 700 },
+    hole: { x: 1350, y: 660, captureR: 44 },
+    bounds: { cx: 830, cy: 660, rx: 940, ry: 680 },
     bodies: [
-      { id: 'asterion', kind: 'attractor', x: 1150, y: 700, radius: 70, mu: 6e6, influenceR: 560, material: 'rock' },
-      // The pincer: vigil above the green, vale squat on the low skim-exit lane.
-      // Overpower the bend and vigil eats you; skim under the planet and vale
-      // bounces you — the wide, judged bend is the only fairway.
-      { id: 'vigil', kind: 'attractor', x: 2100, y: 780, radius: 22, mu: 1.8e6, influenceR: 280, material: 'rock' },
-      { id: 'vale', kind: 'attractor', x: 1560, y: 845, radius: 40, mu: 1.6e6, influenceR: 260, material: 'rock' },
+      // weather preview only: far off the lane, too small to matter yet
+      { id: 'herald', kind: 'attractor', x: 820, y: 1020, radius: 26, mu: 0.5e6, influenceR: 190, material: 'rock' },
     ],
     fragments: [
-      { x: 1150, y: 430 }, // apex of the bend, high over Asterion
-      { x: 1330, y: 850 }, // skim below-behind the planet
-      { x: 1870, y: 560 }, // high line into the green, shy of the vigil
+      { x: 660, y: 640 },
+      { x: 980, y: 700 },
+      { x: 1230, y: 600 },
     ],
     objectives: [
-      { id: 'o1', kind: 'secret', x: 1240, y: 840, r: 60, text: 'Discover what waits behind Asterion.' },
+      { id: 'o1', kind: 'secret', x: 1010, y: 810, r: 60, text: 'Discover what waits below the line.' },
     ],
     story: [
       {
@@ -49,14 +45,14 @@ export const R1_LEVELS: LevelDef[] = [
       },
       {
         id: 'st2',
-        on: { type: 'zone', x: 1150, y: 420, r: 260 },
+        on: { type: 'zone', x: 980, y: 660, r: 240 },
         lines: [
           { who: 'log', text: 'MAINTENANCE LOG 441 — ball locker restocked. Six remain. Do not ask about one through six.' },
         ],
       },
       {
         id: 'st3',
-        on: { type: 'zone', x: 1240, y: 840, r: 150 },
+        on: { type: 'zone', x: 1010, y: 810, r: 150 },
         lines: [
           { who: 'sprocket', text: 'Bzzt! (a one-wheeled drone nudges something shiny toward you)' },
         ],
@@ -71,8 +67,8 @@ export const R1_LEVELS: LevelDef[] = [
       },
     ],
     hint:
-      'The flat lane dies on Asterion. Aim wide, let the planet bend you back down onto the green — ' +
-      'and mind the vigil moon past the cup: power is not the verb here.',
+      'Drag back from Milo and watch the dotted arc — put its end on the cup and let go. ' +
+      'Softer is safer: a gentle roll drops in, a screamer bounces out.',
   },
   {
     id: 'L02',
@@ -85,15 +81,16 @@ export const R1_LEVELS: LevelDef[] = [
     par: 2,
     pinBudget: 2,
     tee: { x: 260, y: 720 },
-    hole: { x: 1900, y: 610 },
+    hole: { x: 1900, y: 610, captureR: 36 },
     bounds: { cx: 1080, cy: 570, rx: 1500, ry: 900 },
     bodies: [
-      { id: 'vell', kind: 'attractor', x: 1410, y: 235, radius: 60, mu: 5e6, influenceR: 520, material: 'ice' },
+      { id: 'vell', kind: 'attractor', x: 1410, y: 235, radius: 60, mu: 2.6e6, influenceR: 520, material: 'ice' },
     ],
     hazards: [
-      { id: 'pylon', kind: 'barrier', a: { x: 1150, y: 430 }, b: { x: 1150, y: 1000 } },
+      // the wall: shorter now — a wide, readable gap above the tip
+      { id: 'pylon', kind: 'barrier', a: { x: 1150, y: 560 }, b: { x: 1150, y: 1000 } },
       // the corner kiss: clears an over-cooked mortar back down toward the green
-      { id: 'corner', kind: 'bumper', x: 1215, y: 470, r: 22, boost: 150 },
+      { id: 'corner', kind: 'bumper', x: 1215, y: 600, r: 22, boost: 150 },
     ],
     fragments: [
       { x: 1400, y: 110 }, // over the top of Vell — the committed line
@@ -138,13 +135,13 @@ export const R1_LEVELS: LevelDef[] = [
     par: 3,
     pinBudget: 2,
     tee: { x: 450, y: 720 },
-    hole: { x: 1560, y: 560 },
+    hole: { x: 1560, y: 560, captureR: 36 },
     bounds: { cx: 1005, cy: 685, rx: 1050, ry: 550 },
     bodies: [
-      { id: 'kore', kind: 'attractor', x: 1200, y: 720, radius: 80, mu: 6e6, influenceR: 620, material: 'gas' },
+      { id: 'kore', kind: 'attractor', x: 1200, y: 720, radius: 80, mu: 3.2e6, influenceR: 620, material: 'gas' },
       // The gatepost: massless marker hanging over the orbit's front door — it
-      // drags lazy high lobs down into Kore's grip instead of letting them clear.
-      { id: 'gatepost', kind: 'anchor', x: 1000, y: 430, radius: 0, mu: 3e6, influenceR: 360, material: 'rock' },
+      // nudges lazy high lobs down into Kore's grip instead of letting them clear.
+      { id: 'gatepost', kind: 'anchor', x: 1000, y: 430, radius: 0, mu: 1.4e6, influenceR: 360, material: 'rock' },
     ],
     fragments: [
       { x: 1200, y: 420 }, // top of the orbit ring

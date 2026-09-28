@@ -639,6 +639,9 @@ class Game {
     this.phase = 'strokeEndWait';
     this.waitT = 0.3;
     this.dryStrokes++;
+    // struggle assist: after two dry strokes the cup quietly widens to full
+    // forgiveness by the fourth — the player never sees this number
+    w.assist = Math.min(1, Math.max(0, (this.dryStrokes - 1) / 3));
     // leave the shot's path on the course for the next aim phase
     this.renderer.setLastShot(this.lastShot.length > 4 ? this.lastShot.slice() : null);
     // adaptive help: struggling on a hole? the caddie whispers
